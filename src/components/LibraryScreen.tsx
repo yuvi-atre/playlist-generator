@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useCurate } from '../hooks/useCurate'
 import type { LibraryState } from '../hooks/useLibrary'
+import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
 import type { AppError, CuratedTrack, SpotifyUser, Track } from '../lib/types'
 
 interface Props {
   user: SpotifyUser | null
   library: LibraryState
+  getAccessToken: () => Promise<string>
   onLogout: () => void
 }
 
-export function LibraryScreen({ user, library, onLogout }: Props) {
+export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props) {
   const { tracks, fetchedAt, loading, progress, error } = library
   const curate = useCurate(tracks)
 
@@ -41,9 +43,17 @@ export function LibraryScreen({ user, library, onLogout }: Props) {
         ) : tracks.length === 0 ? (
           <EmptyState onRefresh={() => void library.load(true)} />
         ) : curate.result ? (
-          <CurateResult results={curate.result} tracks={tracks} onReset={curate.reset} />
+          <CurateResult
+            results={curate.result}
+            tracks={tracks}
+            vibe={curate.vibe ?? ''}
+            userId={user?.id ?? ''}
+            getAccessToken={getAccessToken}
+            onReset={curate.reset}
+          />
         ) : (
           <LibraryStats
+            tracks={tracks}
             trackCount={tracks.length}
             artistCount={uniqueArtists}
             genreCount={uniqueGenres}
@@ -105,7 +115,10 @@ function EmptyState({ onRefresh }: { onRefresh: () => void }) {
   )
 }
 
+const PAGE_SIZE = 50
+
 function LibraryStats({
+  tracks,
   trackCount,
   artistCount,
   genreCount,
@@ -115,6 +128,7 @@ function LibraryStats({
   curateError,
   onCurate,
 }: {
+  tracks: Track[]
   trackCount: number
   artistCount: number
   genreCount: number
@@ -125,7 +139,22 @@ function LibraryStats({
   onCurate: (vibe: string) => void
 }) {
   const [vibe, setVibe] = useState('')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
   const cachedDate = fetchedAt ? new Date(fetchedAt).toLocaleString() : null
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return tracks
+    return tracks.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.artists.some((a) => a.toLowerCase().includes(q))
+    )
+  }, [tracks, search])
+
+  const paginated = filtered.slice(0, (page + 1) * PAGE_SIZE)
+  const hasMore = paginated.length < filtered.length
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -140,7 +169,7 @@ function LibraryStats({
       <div className="flex gap-8">
         <Stat label="tracks" value={trackCount} />
         <Stat label="artists" value={artistCount} />
-        <Stat label="genres" value={genreCount} />
+        {genreCount > 0 && <Stat label="genres" value={genreCount} />}
       </div>
 
       {cachedDate && <p className="text-zinc-600 text-xs">Cached {cachedDate}</p>}
@@ -171,6 +200,42 @@ function LibraryStats({
       </form>
 
       {curateError && <p className="text-red-400 text-sm">{curateError.message}</p>}
+
+      {/* Song browser */}
+      <div className="w-full mt-2 flex flex-col gap-3 text-left">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(0) }}
+          placeholder="Search songs or artists…"
+          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
+        />
+
+        {search && (
+          <p className="text-zinc-500 text-xs">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>
+        )}
+
+        <ul className="flex flex-col gap-1">
+          {paginated.map((t) => (
+            <li key={t.id} className="flex items-baseline justify-between gap-4 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors">
+              <div className="min-w-0">
+                <span className="text-white text-sm truncate block">{t.name}</span>
+                <span className="text-zinc-500 text-xs truncate block">{t.artists.join(', ')}</span>
+              </div>
+              <span className="text-zinc-600 text-xs shrink-0">{t.year || '—'}</span>
+            </li>
+          ))}
+        </ul>
+
+        {hasMore && (
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors self-center"
+          >
+            Show more
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -178,13 +243,38 @@ function LibraryStats({
 function CurateResult({
   results,
   tracks,
+  vibe,
+  userId,
+  getAccessToken,
   onReset,
 }: {
   results: CuratedTrack[]
   tracks: Track[]
+  vibe: string
+  userId: string
+  getAccessToken: () => Promise<string>
   onReset: () => void
 }) {
   const trackMap = new Map(tracks.map((t) => [t.id, t]))
+  const [playlistName, setPlaylistName] = useState(vibe || 'My Vibe Playlist')
+  const [saving, setSaving] = useState(false)
+  const [savedUrl, setSavedUrl] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const token = await getAccessToken()
+      const playlistId = await createPlaylist(token, userId, playlistName, false)
+      await addTracksToPlaylist(token, playlistId, results.map((r) => r.id))
+      setSavedUrl(`https://open.spotify.com/playlist/${playlistId}`)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save playlist')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-lg">
@@ -197,6 +287,39 @@ function CurateResult({
           Start over
         </button>
       </div>
+
+      {savedUrl ? (
+        <div className="w-full flex flex-col items-center gap-3 py-4">
+          <p className="text-green-400 text-sm font-medium">Playlist saved to Spotify!</p>
+          <a
+            href={savedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
+          >
+            Open in Spotify
+          </a>
+        </div>
+      ) : (
+        <div className="w-full flex gap-2">
+          <input
+            type="text"
+            value={playlistName}
+            onChange={(e) => setPlaylistName(e.target.value)}
+            disabled={saving}
+            className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
+          />
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving || !playlistName.trim()}
+            className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors shrink-0"
+          >
+            {saving ? 'Saving…' : 'Save to Spotify'}
+          </button>
+        </div>
+      )}
+
+      {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
 
       <ul className="w-full flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
         {results.map(({ id, reason }) => {

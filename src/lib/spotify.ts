@@ -181,7 +181,10 @@ async function apiGetUrl<T>(url: string, accessToken: string): Promise<T> {
     return apiGetUrl(url, accessToken)
   }
 
-  if (!res.ok) throw new Error(`Spotify API ${res.status}: ${url}`)
+  if (!res.ok) {
+    console.error(`Spotify API ${res.status}: ${url}`)
+    throw new Error(`Spotify API error ${res.status}`)
+  }
   return res.json() as Promise<T>
 }
 

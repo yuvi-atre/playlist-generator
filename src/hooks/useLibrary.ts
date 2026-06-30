@@ -56,11 +56,16 @@ export function useLibrary(getAccessToken: () => Promise<string>): LibraryState 
           return
         }
 
-        // Stage 2: batch-fetch artist genres
+        // Stage 2: batch-fetch artist genres (non-fatal — 403s gracefully skip genres)
         const artistIds = [
           ...new Set(savedTracks.flatMap((item) => item.track.artists.map((a) => a.id))),
         ]
-        const artistMap = await fetchArtistsBatch(token, artistIds)
+        let artistMap: Awaited<ReturnType<typeof fetchArtistsBatch>> = new Map()
+        try {
+          artistMap = await fetchArtistsBatch(token, artistIds)
+        } catch (err) {
+          console.warn('Artist genre fetch failed — continuing without genres:', err)
+        }
 
         // Stage 3: assemble Track objects
         const library = buildLibrary(savedTracks, artistMap)

@@ -29,5 +29,5 @@ function AuthenticatedApp() {
     return <LoginScreen onLogin={auth.login} loading={auth.loading} error={auth.error} />
   }
 
-  return <LibraryScreen user={auth.user} library={library} onLogout={auth.logout} />
+  return <LibraryScreen user={auth.user} library={library} getAccessToken={auth.getAccessToken} onLogout={auth.logout} />
 }

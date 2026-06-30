@@ -6,6 +6,7 @@ export interface CurateState {
   loading: boolean
   error: AppError | null
   result: CuratedTrack[] | null
+  vibe: string | null
   curate: (vibe: string) => Promise<void>
   reset: () => void
 }
@@ -14,12 +15,14 @@ export function useCurate(library: Track[]): CurateState {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<AppError | null>(null)
   const [result, setResult] = useState<CuratedTrack[] | null>(null)
+  const [vibe, setVibe] = useState<string | null>(null)
 
   const curate = useCallback(
     async (vibe: string) => {
       setLoading(true)
       setError(null)
       setResult(null)
+      setVibe(vibe)
 
       try {
         const candidates = preFilter(library, vibe)
@@ -77,5 +80,5 @@ export function useCurate(library: Track[]): CurateState {
     setResult(null)
   }, [])
 
-  return { loading, error, result, curate, reset }
+  return { loading, error, result, vibe, curate, reset }
 }

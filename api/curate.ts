@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import type { CurateRequest, CurateResponse } from '../src/lib/types'
+import type { CurateRequest, CurateResponse } from '../src/lib/types.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -69,8 +69,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let parsed: CurateResponse
     try {
-      parsed = JSON.parse(block.text) as CurateResponse
+      // Strip markdown fences if Claude wrapped the JSON despite instructions
+      const raw = block.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')
+      parsed = JSON.parse(raw) as CurateResponse
     } catch {
+      console.error('Claude raw response:', block.text)
       return res.status(500).json({ error: 'Claude returned invalid JSON' })
     }
 
