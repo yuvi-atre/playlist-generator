@@ -1,0 +1,84 @@
+// Core domain types — keep in sync with PRD §10
+
+export interface Track {
+  id: string
+  name: string
+  artists: string[]
+  album: string
+  genres: string[]
+  year: number
+  popularity: number
+  addedAt: string
+}
+
+// ── Spotify API shapes ────────────────────────────────────────────────────────
+
+export interface SpotifyTokens {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number // epoch ms
+}
+
+export interface SpotifyUser {
+  id: string
+  displayName: string
+  imageUrl: string | null
+}
+
+// Raw shape from GET /me/tracks (one item in the `items` array)
+export interface SpotifySavedTrackItem {
+  added_at: string
+  track: {
+    id: string
+    name: string
+    popularity: number
+    album: {
+      name: string
+      release_date: string
+    }
+    artists: Array<{ id: string; name: string }>
+  }
+}
+
+// Raw shape from GET /artists (batch)
+export interface SpotifyArtist {
+  id: string
+  genres: string[]
+  popularity: number
+}
+
+// ── Claude curation API shapes ────────────────────────────────────────────────
+
+// What we POST to /api/curate
+export interface CurateRequest {
+  vibe: string
+  candidates: CandidateTrack[]
+}
+
+// Lean candidate payload sent to the LLM (no full Track to keep token count down)
+export interface CandidateTrack {
+  id: string
+  name: string
+  artists: string[]
+  genres: string[]
+  year: number
+}
+
+// What Claude returns (strict JSON — parse defensively)
+export interface CurateResponse {
+  tracks: CuratedTrack[]
+}
+
+export interface CuratedTrack {
+  id: string
+  reason: string
+}
+
+// ── App state ─────────────────────────────────────────────────────────────────
+
+export type AppScreen = 'login' | 'library' | 'chat' | 'review'
+
+export interface AppError {
+  code: 'token_expired' | 'empty_results' | 'rate_limit' | 'api_error' | 'unknown'
+  message: string
+}
