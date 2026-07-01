@@ -396,6 +396,29 @@ function LibraryStats({
   const paginated = filtered.slice(0, (page + 1) * PAGE_SIZE)
   const hasMore = paginated.length < filtered.length
 
+  // Sync the right column's height to the left column's actual rendered height
+  // (lg+ only, where they sit side by side) — so opening/closing Filters grows
+  // or shrinks the song list to match, instead of the panel floating or being
+  // independently capped. Falls back to the default vh-based cap below `lg` or
+  // before the first measurement.
+  const leftColRef = useRef<HTMLDivElement>(null)
+  const [syncedHeight, setSyncedHeight] = useState<number | null>(null)
+  useEffect(() => {
+    const el = leftColRef.current
+    if (!el) return
+    const update = () => {
+      setSyncedHeight(window.matchMedia('(min-width: 1024px)').matches ? el.offsetHeight : null)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = vibe.trim()
@@ -408,7 +431,7 @@ function LibraryStats({
       className="w-full max-w-7xl grid gap-12 lg:grid-cols-[26rem_1fr] items-start"
     >
       {/* LEFT: library info + vibe prompt (sticky on desktop) */}
-      <div className="flex flex-col gap-6 lg:sticky lg:top-6">
+      <div ref={leftColRef} className="flex flex-col gap-6 lg:sticky lg:top-6">
         <div className="flex flex-col gap-4 text-center lg:text-left">
           <h2 className="text-2xl font-semibold text-white">Your library is ready</h2>
 
@@ -466,8 +489,9 @@ function LibraryStats({
           <p className="text-red-400 text-sm text-center lg:text-left">{curateError.message}</p>
         )}
 
-        {/* Filters last: collapsed by default; expanding only grows/scrolls itself,
-            so it can't push the Generate button or the brand card off-screen. */}
+        {/* Filters last: collapsed by default, so it can't push the Generate button
+            or the brand card off-screen. Expanding it grows the left column's real
+            height, which the right song list mirrors (see syncedHeight above). */}
         <FiltersPanel
           filters={filters}
           onChange={setFilters}
@@ -496,7 +520,10 @@ function LibraryStats({
           </p>
         )}
 
-        <ul className="custom-scrollbar flex flex-col gap-1 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-11rem)]">
+        <ul
+          className="custom-scrollbar flex flex-col gap-1 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-11rem)]"
+          style={syncedHeight ? { maxHeight: syncedHeight } : undefined}
+        >
           {paginated.map((t) => (
             <li
               key={t.id}
@@ -561,26 +588,6 @@ function FiltersPanel({
   disabled: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const panelRef = useRef<HTMLDivElement>(null)
-
-  // Floating dropdown, not inline content: expanding it must never shift the
-  // Generate button or push the page around, on any viewport height. Close on
-  // outside click / Escape, like any other popover.
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (e: PointerEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
 
   const gateCount =
     filters.includeGenres.length +
@@ -607,7 +614,7 @@ function FiltersPanel({
   const clearAll = () => onChange({ ...DEFAULT_FILTERS, length: filters.length })
 
   return (
-    <div ref={panelRef} className="relative rounded-xl border border-zinc-800 bg-zinc-900/40">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -625,7 +632,7 @@ function FiltersPanel({
       </button>
 
       {open && (
-        <div className="custom-scrollbar absolute left-0 right-0 top-full z-30 mt-2 flex max-h-[60vh] flex-col gap-5 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 shadow-2xl">
+        <div className="flex flex-col gap-5 border-t border-zinc-800 px-4 py-4">
           {/* Length */}
           <div className="flex flex-col gap-2">
             <FilterLabel>Playlist length</FilterLabel>
