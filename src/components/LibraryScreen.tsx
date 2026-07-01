@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCurate, type CuratePhase } from '../hooks/useCurate'
-import { RobotHero, RobotTyping, CuratedVisualizer } from './RobotMascot'
+import {
+  RobotHero,
+  RobotTyping,
+  CuratedVisualizer,
+  PlaylistSuccess,
+  SuccessCheck,
+} from './RobotMascot'
 import { LASTFM_API_KEY } from '../lib/config'
 import { fetchArtistGenres } from '../lib/lastfm'
 import { canonicalizeGenres } from '../lib/genres'
@@ -972,8 +978,12 @@ function CurateResult({
         </div>
 
         {savedUrl ? (
-          <div className="flex flex-col items-center lg:items-start gap-3">
-            <p className="text-green-400 text-sm font-medium">Playlist saved to Spotify!</p>
+          <div className="success-card flex flex-col items-center lg:items-start gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+            <PlaylistSuccess />
+            <div className="success-row flex items-center gap-2">
+              <SuccessCheck />
+              <p className="text-white text-sm font-semibold">Playlist saved to Spotify!</p>
+            </div>
             <div className="flex gap-2">
               <a
                 href={savedUrl}

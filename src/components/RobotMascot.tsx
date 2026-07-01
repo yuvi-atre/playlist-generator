@@ -1,6 +1,7 @@
 // Robot mascots rendered as inline SVG (not <img src>) so the animation is
 // driven by index.css keyframes. Keeping the animation out of the .svg files
 // avoids an SVG optimizer stripping <style>/class attributes on save.
+import type { CSSProperties } from 'react'
 
 const HERO_BARS: { x: number; delay: string }[] = [
   { x: 82, delay: '-0.90s' },
@@ -200,5 +201,197 @@ export function CuratedVisualizer({ className }: { className?: string }) {
         now curated for your vibe
       </span>
     </div>
+  )
+}
+
+// Sparks bursting out from behind the headphone band when the playlist saves.
+// Opacity 0→1→0, translated by its own (dx, dy) via CSS custom properties —
+// a one-shot, non-looping burst.
+const SUCCESS_SPARKS: {
+  size: number
+  dx: number
+  dy: number
+  delay: string
+  color: string
+  note?: boolean
+}[] = [
+  { size: 9, dx: -30, dy: -16, delay: '.15s', color: '#1db954' },
+  { size: 7, dx: 14, dy: -30, delay: '.22s', color: '#5be59a' },
+  { size: 13, dx: 32, dy: -8, delay: '.1s', color: '#1db954', note: true },
+  { size: 11, dx: -14, dy: -32, delay: '.28s', color: '#159443', note: true },
+]
+
+// Small notes that pop in and out (scale+fade, slightly rotated) around the
+// mascot on a loop, staggered so they never all appear at once — separate
+// from the one-shot spark burst above.
+const SUCCESS_NOTES: {
+  pos: CSSProperties
+  size: number
+  color: string
+  rot: string
+  delay: string
+}[] = [
+  { pos: { top: 2, left: -8 }, size: 16, color: '#1db954', rot: '-14deg', delay: '0s' },
+  { pos: { top: -6, right: -4 }, size: 14, color: '#5be59a', rot: '12deg', delay: '.65s' },
+  { pos: { top: 56, left: -16 }, size: 13, color: '#159443', rot: '-8deg', delay: '1.3s' },
+  { pos: { top: 64, right: -18 }, size: 15, color: '#1db954', rot: '10deg', delay: '1.95s' },
+  { pos: { bottom: 6, left: 22 }, size: 12, color: '#5be59a', rot: '-16deg', delay: '.35s' },
+]
+
+const SUCCESS_FACE_BARS = HERO_BARS
+
+// "Playlist saved" mascot: headphones (band + cups) with the antenna+note
+// still poking up between the cups, swaying side to side in a continuous
+// loop for as long as the saved-state card is on screen — plus its face bars
+// pulsing (same as the hero) and small notes popping in/out around him.
+// A one-shot spark burst fires from behind the headphones on mount, so this
+// should render only inside the real success branch (see LibraryScreen's
+// `savedUrl` check), not unconditionally.
+export function PlaylistSuccess({ className }: { className?: string }) {
+  return (
+    <div className={`relative w-[114px] h-[140px] ${className ?? ''}`}>
+      {SUCCESS_SPARKS.map((d, i) => (
+        <svg
+          key={i}
+          viewBox="0 0 24 24"
+          className="success-confetti absolute top-[34px] left-1/2"
+          style={{
+            width: d.size,
+            height: d.size,
+            color: d.color,
+            animationDelay: d.delay,
+            ['--dx' as string]: `${d.dx}px`,
+            ['--dy' as string]: `${d.dy}px`,
+          }}
+          fill="currentColor"
+        >
+          {d.note ? (
+            <path d="M14 3v10.55A4 4 0 1 0 16 17V7h4V3h-6z" />
+          ) : (
+            <circle cx="12" cy="12" r="12" />
+          )}
+        </svg>
+      ))}
+
+      {SUCCESS_NOTES.map((n, i) => (
+        <svg
+          key={i}
+          viewBox="0 0 24 24"
+          className="note-pop absolute"
+          style={{
+            ...n.pos,
+            width: n.size,
+            height: n.size,
+            color: n.color,
+            animationDelay: n.delay,
+            ['--rot' as string]: n.rot,
+          }}
+          fill="currentColor"
+        >
+          <path d="M14 3v10.55A4 4 0 1 0 16 17V7h4V3h-6z" />
+        </svg>
+      ))}
+
+      <svg
+        viewBox="0 0 240 300"
+        className="mascot-sway absolute inset-0 w-full h-full overflow-visible"
+        aria-hidden="true"
+      >
+        {/* headphones: band arcing over the top + two cups at the sides */}
+        <path
+          d="M46 100 C46 54, 80 40, 120 40 C160 40, 194 54, 194 100"
+          fill="none"
+          stroke="#159443"
+          strokeWidth="8"
+          strokeLinecap="round"
+        />
+        <rect x="30" y="98" width="24" height="52" rx="12" fill="#159443" />
+        <rect x="36" y="106" width="12" height="36" rx="6" fill="#0d3320" />
+        <rect x="186" y="98" width="24" height="52" rx="12" fill="#159443" />
+        <rect x="192" y="106" width="12" height="36" rx="6" fill="#0d3320" />
+
+        {/* antenna + note, poking up between the headphone cups */}
+        <g className="robot-note">
+          <line
+            x1="120"
+            y1="88"
+            x2="120"
+            y2="72"
+            stroke="#1db954"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+          <path d="M120 72 V42" stroke="#1db954" strokeWidth="5" strokeLinecap="round" />
+          <path
+            d="M120 42 c10 1 16 7 15 16"
+            fill="none"
+            stroke="#1db954"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+          <ellipse
+            cx="111"
+            cy="72"
+            rx="10"
+            ry="7.5"
+            fill="#1db954"
+            transform="rotate(-18 111 72)"
+          />
+        </g>
+
+        <rect x="48" y="86" width="144" height="116" rx="22" fill="#1db954" />
+        <rect x="60" y="104" width="120" height="64" rx="14" fill="#08130c" />
+        {SUCCESS_FACE_BARS.map((b) => (
+          <rect
+            key={b.x}
+            className="robot-eq"
+            x={b.x}
+            y="120"
+            width="5"
+            height="38"
+            rx="2.5"
+            fill="#5be59a"
+            style={{ animationDelay: b.delay }}
+          />
+        ))}
+        <rect x="108" y="202" width="24" height="10" rx="5" fill="#159443" />
+        <rect x="70" y="210" width="100" height="32" rx="13" fill="#1db954" />
+        <rect x="100" y="222" width="6" height="8" rx="3" fill="#08130c" />
+        <rect x="110" y="217" width="6" height="14" rx="3" fill="#08130c" />
+        <rect x="120" y="220" width="6" height="10" rx="3" fill="#08130c" />
+        <rect x="130" y="216" width="6" height="15" rx="3" fill="#08130c" />
+        <rect x="140" y="223" width="6" height="8" rx="3" fill="#08130c" />
+        <rect x="82" y="242" width="28" height="12" rx="6" fill="#159443" />
+        <rect x="130" y="242" width="28" height="12" rx="6" fill="#159443" />
+      </svg>
+    </div>
+  )
+}
+
+// Minimal inline checkmark shown next to the "Playlist saved" label — a thin
+// stroked circle with a hand-drawn-in check, not a filled badge. One-shot,
+// fires on mount (same rule as PlaylistSuccess above).
+export function SuccessCheck({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className ?? 'w-[18px] h-[18px]'} aria-hidden="true">
+      <circle
+        className="check-ring"
+        cx="10"
+        cy="10"
+        r="8.5"
+        fill="none"
+        stroke="#1db954"
+        strokeWidth="1.6"
+      />
+      <path
+        className="check-draw"
+        d="M5.5 10.2 L8.5 13.2 L14.5 6.6"
+        fill="none"
+        stroke="#1db954"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }

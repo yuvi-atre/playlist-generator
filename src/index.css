@@ -125,3 +125,120 @@ body {
     animation: none;
   }
 }
+
+/* Playlist-saved success state (PlaylistSuccess + SuccessCheck in
+   RobotMascot.tsx). The mascot sway/face/note-pop loops run for as long as
+   the saved-state card is mounted; the spark burst + checkmark draw are
+   one-shot (iteration-count 1, `both`/`forwards` fill) so they only play
+   once, right when the card first appears. */
+@keyframes mascot-sway {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+@keyframes note-pop {
+  0%,
+  100% {
+    transform: scale(0) rotate(var(--rot, 0deg));
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1) rotate(var(--rot, 0deg));
+    opacity: 0.85;
+  }
+}
+@keyframes check-ring-in {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes check-draw {
+  0% {
+    stroke-dashoffset: 26;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes success-confetti {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(1);
+    opacity: 0;
+  }
+}
+@keyframes success-card-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(29, 185, 84, 0);
+  }
+  30% {
+    box-shadow: 0 0 0 6px rgba(29, 185, 84, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(29, 185, 84, 0);
+  }
+}
+@keyframes success-row-in {
+  0% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.mascot-sway {
+  animation: mascot-sway 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+.note-pop {
+  animation: note-pop 2.6s ease-in-out infinite;
+}
+.check-ring {
+  animation: check-ring-in 0.3s ease-out 0.5s 1 both;
+}
+.check-draw {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: check-draw 0.4s ease-out 0.62s 1 forwards;
+}
+.success-confetti {
+  animation: success-confetti 1s cubic-bezier(0.2, 0.7, 0.3, 1) 1 both;
+}
+.success-card {
+  animation: success-card-flash 1.2s ease-out 1;
+}
+.success-row {
+  animation: success-row-in 0.35s ease-out 0.55s 1 both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascot-sway,
+  .note-pop,
+  .check-ring,
+  .check-draw,
+  .success-confetti,
+  .success-card,
+  .success-row {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
