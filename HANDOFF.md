@@ -136,7 +136,36 @@ All committed (`ce47460`) and deployed.
   coverage (dictionary or Haiku expansion); **#3 scoring balance + #4 artist diversity (chosen next,
   free/local)**; #5 candidate count. Full detail in the `project_roadmap` memory.
 
-## Next step (open ideas, none started)
+## Session 2026-07-01 (cont.) — search/playlist filters + genre normalization
+Committed to `main` (`53be24d`, `5a2cd85`); NOT yet deployed to prod.
+- **Filters** (`src/lib/types.ts` `CurateFilters`, `preFilter.ts`, `useCurate.ts`, `LibraryScreen.tsx`
+  `FiltersPanel`): include/exclude genres, include/exclude artists, decade gate, playlist length.
+  HARD gates applied in preFilter BEFORE scoring (AND across dims, OR within); vibe ranks the survivors.
+  Include-artist is cap-exempt + boosted (adaptive `MAX_PER_ARTIST` resolution). Length → target band
+  in `api/curate.ts` (short ~15 / medium ~25 / long ~45) with an explicit "don't pad" instruction.
+  Collapsible panel, internally scrollable; genre chips show +/− state; empty-pool has its own message.
+- **Genre normalization** (`src/lib/genres.ts`, read-time — no re-fetch needed): collapses Last.fm
+  variants (hiphop/hip-hop→hip hop, whole rnb family→r&b, lofi→lo-fi, jpop→j-pop, ost→soundtrack) and
+  drops non-genres (geography, artist names, sentiment/meta/franchise junk, decades/years). Feeds the
+  stat, chips, and include/exclude matching; deliberately NOT wired into the tuned vibe-scoring path.
+  `LibraryScreen` applies `MIN_GENRE_ARTISTS=2` to stat + chips. Tuned against a real dump: ~300 → ~50.
+- **Polish:** result-list GSAP stagger capped to first 12 cards + `clearProps` (long lists were fading
+  to an unreadable dark gradient); result cards made opaque (`bg-zinc-900`).
+- **DECIDED:** genre stat = "meaningful genres (≥2 artists)"; vibe→genre fix = **Haiku vibe-expansion
+  pass** (NOT started — next session). Note: `localhost` vs `127.0.0.1` split the OAuth `sessionStorage`
+  and caused "State mismatch — CSRF"; do the whole dev flow on **127.0.0.1:5173** (matches redirect URI).
+
+## Next step (open ideas)
+- **Haiku vibe-expansion pass (CHOSEN, not started):** one `claude-haiku-4-5` call turns any free-text
+  vibe into genre/era/mood hints BEFORE preFilter, so off-dictionary vibes (e.g. "rainy Tokyo rooftop")
+  don't fall back to popularity. Design: new `/api/expand-vibe` serverless endpoint (key stays server-
+  side); `useCurate` calls it first (new 'expanding' phase) and passes hints into `preFilter` to augment
+  `genreKeywords`/`eraRanges`; cache expansion per-vibe in localStorage; ~$0.0003/playlist (roadmap-
+  approved to route expansion to Haiku, not a 2nd Sonnet call). Was about to consult the `claude-api`
+  skill for exact Haiku model id / structured-output params — do that first.
+- **Deploy pending:** the two commits above are on `main` but NOT on prod yet (`npx vercel --prod --yes`).
+
+## Next step (older open ideas, none started)
 - **Search filtering #3 + #4** — DONE (`preFilter.ts`, knobs are named constants). Live `111fdbd`.
 - **v2 curation features (validated 2026-07-01, not started; full detail in `project_roadmap` memory):**
   1. **Artist-focused playlists.** ⚠️ Conflicts with the `MAX_PER_ARTIST=3` diversity cap — reconcile
