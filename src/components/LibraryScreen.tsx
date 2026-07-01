@@ -970,11 +970,11 @@ function CurateResult({
   }
 
   return (
-    <div className="w-full max-w-5xl grid gap-8 lg:grid-cols-[19rem_1fr] items-start">
+    <div className="w-full max-w-7xl grid gap-12 lg:grid-cols-[26rem_1fr] items-start">
       {/* LEFT: summary + save (sticky on desktop) */}
       <div className="flex flex-col gap-5 lg:sticky lg:top-6">
         <div className="flex flex-col gap-1 text-center lg:text-left">
-          <h2 className="text-xl font-semibold text-white">{results.length} tracks curated</h2>
+          <h2 className="text-2xl font-semibold text-white">{results.length} tracks curated</h2>
           {vibe && <p className="text-zinc-500 text-sm truncate">for “{vibe}”</p>}
           {genreCount > 0 && (
             <p className="text-zinc-600 text-xs">
@@ -997,13 +997,13 @@ function CurateResult({
                 href={savedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
+                className="px-5 py-3.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-base font-semibold transition-colors"
               >
                 Open in Spotify
               </a>
               <button
                 onClick={() => void handleShare()}
-                className="px-5 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-500 text-white text-sm font-medium transition-colors"
+                className="px-5 py-3.5 rounded-xl border border-zinc-700 hover:border-zinc-500 text-white text-base font-semibold transition-colors"
               >
                 {shareStatus === 'copied'
                   ? 'Link copied!'
@@ -1020,12 +1020,12 @@ function CurateResult({
               value={playlistName}
               onChange={(e) => setPlaylistName(e.target.value)}
               disabled={saving}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-base text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
             />
             <button
               onClick={() => void handleSave()}
               disabled={saving || !playlistName.trim()}
-              className="w-full px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+              className="w-full px-5 py-4 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-base font-semibold transition-colors"
             >
               {saving ? 'Saving…' : 'Save to Spotify'}
             </button>
