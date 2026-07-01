@@ -3,7 +3,8 @@
 The PRD is the static spec. This file tracks live build progress. Update it as you go.
 
 ## Status
-**Phase:** Steps 1–6 complete. App is live and functional. Step 7 (error handling pass) is next.
+**Phase:** Steps 1–7 complete. Full flow verified end-to-end locally (2026-06-30): vibe → curated
+playlist → real playlist saved to Spotify with all tracks. Ready to redeploy.
 
 ## Live URL
 https://playlist-generator-theta-one.vercel.app
@@ -46,19 +47,33 @@ https://playlist-generator-theta-one.vercel.app
 ## In progress
 - (nothing)
 
+## Session 2026-06-30 — fixes landed
+- **Last.fm genre enrichment** (`src/lib/lastfm.ts`): Spotify `/v1/artists` 403s, so genres are
+  backfilled from Last.fm top-tags (cached in localStorage). `VITE_LASTFM_API_KEY` env var.
+  Wired into `useCurate` before the `/api/curate` call.
+- **Curation hardened** (`api/curate.ts`): model → `claude-sonnet-5` with **structured outputs**
+  (`output_config.format` JSON schema) so Claude returns strict JSON — no prose, no markdown fences.
+  Was `claude-sonnet-4-6` + 2048 tokens, which rambled/truncated → 500s. Now 8192 tokens,
+  `thinking: disabled`, `stop_reason` guards, and hallucinated IDs filtered against the candidate set.
+- **OAuth callback fixes:** Vite bound to `127.0.0.1` (`vite.config.ts`) so the `127.0.0.1/callback`
+  redirect resolves (was IPv6-only `localhost`); `show_dialog: 'true'` on auth; module-level guard in
+  `CallbackHandler` to stop React StrictMode double-exchanging the single-use code (was a 400).
+- **Spotify Feb 2026 API migration** (the big one — root cause of the persistent 403s):
+  - `POST /users/{id}/playlists` was removed for Dev Mode apps → now `POST /me/playlists`.
+  - `POST /playlists/{id}/tracks` renamed → `POST /playlists/{id}/items`.
+  - Also required: add the login account's **email** under Spotify dashboard → User Management.
+- Error bodies now logged on failed Spotify GET/POST (`apiGetUrl`/`apiPost`).
+
 ## Next step
-- **Step 7 — error handling pass:**
-  - Token expiry mid-flow (force re-login).
-  - Empty curate results (better messaging).
-  - 429 rate limits on Spotify fetch.
-  - API errors surfaced clearly on Save to Spotify.
-  - Consider: what happens if `createPlaylist` succeeds but `addTracksToPlaylist` fails?
+- Redeploy to Vercel (frontend changes + `api/curate.ts`). Confirm `VITE_LASTFM_API_KEY` is set in
+  Vercel env alongside the existing vars.
+- Optional polish still open from Step 7: 429 backoff messaging on Spotify fetch, empty-curate copy.
 
 ## Decisions log
 - Two-stage curation (code pre-filter → Claude pass). [PRD §8]
 - Vercel serverless backend holds the Anthropic key. [PRD §9]
 - Model A: single shared key + Console spend cap. [PRD §9]
-- Claude Sonnet (`claude-sonnet-4-6`) for curation. [PRD §9]
+- Claude Sonnet (`claude-sonnet-5`) for curation, with structured outputs for strict JSON. [PRD §9]
 - Playlists private by default. [PRD §6]
 - Tailwind v4 (Vite plugin, no config file). @tailwindcss/vite.
 - Linting: oxlint (template default) + Prettier.
@@ -67,9 +82,13 @@ https://playlist-generator-theta-one.vercel.app
 - `vercel dev` incompatible with Vite 8 — local dev uses `npm run dev` + `npm run dev:api` instead.
 
 ## Known Issues
-- **0 genres:** Spotify `/v1/artists` returns 403 for this app. Artist genre fetch is non-fatal
-  (library loads, genres are empty). Pre-filter and Claude curation still work on name/artist/year.
-  Fix: apply for Extended Quota Mode in the Spotify developer dashboard.
+- **`dev:api` does NOT hot-reload:** `npm run dev:api` caches the imported `api/curate.ts` in Node's
+  ESM module cache. After editing `api/curate.ts` you MUST restart `dev:api`, or you'll test stale code.
+  (Cost us a long debugging loop — the code was right, the running server wasn't.)
+- **Spotify `/v1/artists` still 403s:** genre backfill now comes from Last.fm instead. The Spotify
+  endpoint needs Extended Quota Mode (not requested; not needed).
+- **Spotify Dev Mode:** the login account's email must be added under dashboard → User Management
+  (max 5 users) or all API calls 403.
 - **No public playlist toggle:** `playlist-modify-public` scope not requested. Adding it requires
   users to re-auth. Deferred to v2 per PRD.
 

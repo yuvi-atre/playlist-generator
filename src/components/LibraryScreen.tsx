@@ -47,7 +47,6 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             results={curate.result}
             tracks={tracks}
             vibe={curate.vibe ?? ''}
-            userId={user?.id ?? ''}
             getAccessToken={getAccessToken}
             onReset={curate.reset}
           />
@@ -244,14 +243,12 @@ function CurateResult({
   results,
   tracks,
   vibe,
-  userId,
   getAccessToken,
   onReset,
 }: {
   results: CuratedTrack[]
   tracks: Track[]
   vibe: string
-  userId: string
   getAccessToken: () => Promise<string>
   onReset: () => void
 }) {
@@ -266,7 +263,7 @@ function CurateResult({
     setSaveError(null)
     try {
       const token = await getAccessToken()
-      const playlistId = await createPlaylist(token, userId, playlistName, false)
+      const playlistId = await createPlaylist(token, playlistName, false)
       await addTracksToPlaylist(token, playlistId, results.map((r) => r.id))
       setSavedUrl(`https://open.spotify.com/playlist/${playlistId}`)
     } catch (err) {

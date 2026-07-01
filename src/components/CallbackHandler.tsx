@@ -2,10 +2,16 @@ import { useEffect, useState } from 'react'
 import { exchangeCode } from '../lib/spotify'
 import { storage } from '../lib/storage'
 
+// Module-level guard: React StrictMode invokes effects twice in dev, which would
+// exchange the single-use auth code twice (the second attempt 400s). Survives remount.
+let codeExchangeStarted = false
+
 export function CallbackHandler() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (codeExchangeStarted) return
+    codeExchangeStarted = true
     void handleCallback()
   }, [])
 

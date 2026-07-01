@@ -21,6 +21,28 @@ Rules:
 - Order tracks for good listening flow.
 - Reasons must be specific to the vibe, not generic.`
 
+// Structured-outputs schema — forces the model to return JSON matching this exact
+// shape, so no prose, no markdown fences, and no truncated/garbled output slips through.
+const CURATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['tracks'],
+  properties: {
+    tracks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'reason'],
+        properties: {
+          id: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+} as const
+
 function formatCandidates(candidates: CurateRequest['candidates']): string {
   return candidates
     .map((t, i) => {
@@ -51,8 +73,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      model: 'claude-sonnet-5',
+      max_tokens: 8192,
+      thinking: { type: 'disabled' },
       system: SYSTEM_PROMPT,
       messages: [
         {
@@ -60,7 +83,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           content: `Vibe: "${vibe.trim()}"\n\nCandidates:\n${formatCandidates(candidates)}`,
         },
       ],
+      output_config: { format: { type: 'json_schema', schema: CURATION_SCHEMA } },
     })
+
+    if (message.stop_reason === 'max_tokens') {
+      return res.status(500).json({ error: 'Curation response was truncated — try again' })
+    }
+    if (message.stop_reason === 'refusal') {
+      return res.status(500).json({ error: 'Curation request was declined' })
+    }
 
     const block = message.content[0]
     if (block.type !== 'text') {
@@ -69,9 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let parsed: CurateResponse
     try {
-      // Strip markdown fences if Claude wrapped the JSON despite instructions
-      const raw = block.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')
-      parsed = JSON.parse(raw) as CurateResponse
+      parsed = JSON.parse(block.text) as CurateResponse
     } catch {
       console.error('Claude raw response:', block.text)
       return res.status(500).json({ error: 'Claude returned invalid JSON' })
@@ -81,7 +110,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Malformed curation response' })
     }
 
-    return res.status(200).json(parsed)
+    // Claude occasionally hallucinates or garbles an ID — drop anything not in the
+    // candidate list rather than surfacing a fake track to the client.
+    const candidateIds = new Set(candidates.map((c) => c.id))
+    const tracks = parsed.tracks.filter((t) => candidateIds.has(t.id))
+
+    if (tracks.length === 0) {
+      return res.status(500).json({ error: 'Curation returned no valid tracks' })
+    }
+
+    return res.status(200).json({ tracks })
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
       if (err.status === 429) {

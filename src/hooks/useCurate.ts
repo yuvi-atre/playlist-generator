@@ -1,4 +1,6 @@
 import { useCallback, useState } from 'react'
+import { LASTFM_API_KEY } from '../lib/config'
+import { fetchArtistGenres } from '../lib/lastfm'
 import { preFilter } from '../lib/preFilter'
 import type { AppError, CurateResponse, CuratedTrack, Track } from '../lib/types'
 
@@ -35,10 +37,18 @@ export function useCurate(library: Track[]): CurateState {
           return
         }
 
+        // Enrich candidates with Last.fm genres (non-fatal if it fails)
+        const uniqueArtists = [...new Set(candidates.map((c) => c.artists[0]).filter(Boolean))]
+        const genreMap = await fetchArtistGenres(uniqueArtists, LASTFM_API_KEY).catch(() => new Map<string, string[]>())
+        const enrichedCandidates = candidates.map((c) => ({
+          ...c,
+          genres: c.genres.length > 0 ? c.genres : (genreMap.get(c.artists[0]) ?? []),
+        }))
+
         const res = await fetch('/api/curate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vibe, candidates }),
+          body: JSON.stringify({ vibe, candidates: enrichedCandidates }),
         })
 
         if (res.status === 429) {

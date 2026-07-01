@@ -5,3 +5,5 @@ export const SPOTIFY_REDIRECT_URI =
 export const SPOTIFY_SCOPES = ['user-library-read', 'playlist-modify-private']
 
 export const LIBRARY_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 h
+
+export const LASTFM_API_KEY = import.meta.env.VITE_LASTFM_API_KEY ?? ''
