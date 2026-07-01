@@ -1,8 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCurate, type CuratePhase } from '../hooks/useCurate'
 import { RobotHero, RobotTyping } from './RobotMascot'
+import { LASTFM_API_KEY } from '../lib/config'
+import { fetchArtistGenres } from '../lib/lastfm'
 import type { LibraryState } from '../hooks/useLibrary'
 import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
 import type { AppError, CuratedTrack, SpotifyUser, Track } from '../lib/types'
@@ -21,7 +23,27 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
   const [started, setStarted] = useState(false)
 
   const uniqueArtists = new Set(tracks.flatMap((t) => t.artists)).size
-  const uniqueGenres = new Set(tracks.flatMap((t) => t.genres)).size
+
+  // Genres come from Last.fm (Spotify /v1/artists 403s). Enrich the full library in the
+  // BACKGROUND after the list has rendered — never blocks the UI; cached in localStorage.
+  const [libGenres, setLibGenres] = useState<Map<string, string[]>>(new Map())
+  useEffect(() => {
+    if (!tracks.length) return
+    let cancelled = false
+    const artists = [...new Set(tracks.map((t) => t.artists[0]).filter(Boolean))]
+    void fetchArtistGenres(artists, LASTFM_API_KEY)
+      .then((map) => {
+        if (!cancelled) setLibGenres(map)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [tracks])
+  const uniqueGenres = useMemo(
+    () => new Set([...libGenres.values()].flat()).size,
+    [libGenres]
+  )
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -169,6 +191,33 @@ function AlbumArt({ url, size = 44 }: { url: string | null; size?: number }) {
   )
 }
 
+// Branded banner (Claude-design) — robot + wordmark + live equalizer. Anchors the
+// left column of the library workspace.
+function BrandBanner() {
+  return (
+    <div className="relative flex items-center gap-4 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(circle at 18% 50%, rgba(34,197,94,0.18), transparent 65%)' }}
+      />
+      <RobotHero className="relative w-16 h-auto shrink-0" />
+      <div className="relative flex flex-col gap-1.5">
+        <span className="text-lg font-semibold leading-tight text-white">Playlist Generator</span>
+        <span className="text-xs text-zinc-500">vibe-curated from your liked songs</span>
+        <div className="mt-1 flex items-end gap-1 h-4">
+          {[7, 14, 10, 16, 9].map((h, i) => (
+            <div
+              key={i}
+              className="robot-eq w-1 rounded-full bg-green-500"
+              style={{ height: h, animationDelay: `${-0.3 * i}s` }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Landing hero shown once the library is ready. "Get Started" swipes the hero
 // up and out, then LibraryStats slides up into place.
 function GetStartedHero({ trackCount, onStart }: { trackCount: number; onStart: () => void }) {
@@ -283,9 +332,9 @@ function LibraryStats({
   }
 
   return (
-    <div ref={rootRef} className="w-full max-w-5xl grid gap-8 lg:grid-cols-[19rem_1fr] items-start">
+    <div ref={rootRef} className="w-full max-w-6xl grid gap-10 lg:grid-cols-[24rem_1fr] items-start">
       {/* LEFT: library info + vibe prompt (sticky on desktop) */}
-      <div className="flex flex-col gap-5 lg:sticky lg:top-6">
+      <div className="flex flex-col gap-6 lg:sticky lg:top-6">
         <div className="flex flex-col gap-4 text-center lg:text-left">
           <h2 className="text-2xl font-semibold text-white">Your library is ready</h2>
 
@@ -306,10 +355,10 @@ function LibraryStats({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="relative">
             <RobotTyping
-              className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-7 h-7 transition-opacity duration-200 ${
+              className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 transition-opacity duration-200 ${
                 showBot ? 'opacity-100' : 'opacity-0'
               }`}
             />
@@ -321,15 +370,15 @@ function LibraryStats({
               onBlur={() => setVibeFocused(false)}
               placeholder="Describe a vibe… (e.g. Minecraft with the boys)"
               disabled={curating}
-              className={`w-full rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50 transition-all ${
-                showBot ? 'pl-11 pr-4' : 'px-4'
+              className={`w-full rounded-xl border border-zinc-700 bg-zinc-900 py-4 text-base text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50 transition-all ${
+                showBot ? 'pl-12 pr-4' : 'px-4'
               }`}
             />
           </div>
           <button
             type="submit"
             disabled={curating || !vibe.trim()}
-            className="w-full px-5 py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+            className="w-full px-5 py-4 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-base font-semibold transition-colors"
           >
             {curating ? 'Curating…' : 'Generate'}
           </button>
@@ -340,6 +389,8 @@ function LibraryStats({
         )}
 
         {curateError && <p className="text-red-400 text-sm text-center lg:text-left">{curateError.message}</p>}
+
+        <BrandBanner />
       </div>
 
       {/* RIGHT: song browser — bounded scroll pane */}
