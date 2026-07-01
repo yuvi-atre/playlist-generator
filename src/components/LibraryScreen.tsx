@@ -405,7 +405,7 @@ function LibraryStats({
   return (
     <div
       ref={rootRef}
-      className="w-full max-w-6xl grid gap-10 lg:grid-cols-[24rem_1fr] items-start"
+      className="w-full max-w-7xl grid gap-12 lg:grid-cols-[26rem_1fr] items-start"
     >
       {/* LEFT: library info + vibe prompt (sticky on desktop) */}
       <div className="flex flex-col gap-6 lg:sticky lg:top-6">
@@ -429,6 +429,8 @@ function LibraryStats({
           </div>
         </div>
 
+        <BrandBanner />
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="relative">
             <RobotTyping
@@ -449,13 +451,6 @@ function LibraryStats({
               }`}
             />
           </div>
-          <FiltersPanel
-            filters={filters}
-            onChange={setFilters}
-            genreOptions={genreOptions}
-            artistOptions={artistOptions}
-            disabled={curating}
-          />
           <button
             type="submit"
             disabled={curating || !vibe.trim()}
@@ -471,7 +466,15 @@ function LibraryStats({
           <p className="text-red-400 text-sm text-center lg:text-left">{curateError.message}</p>
         )}
 
-        <BrandBanner />
+        {/* Filters last: collapsed by default; expanding only grows/scrolls itself,
+            so it can't push the Generate button or the brand card off-screen. */}
+        <FiltersPanel
+          filters={filters}
+          onChange={setFilters}
+          genreOptions={genreOptions}
+          artistOptions={artistOptions}
+          disabled={curating}
+        />
       </div>
 
       {/* RIGHT: song browser — bounded scroll pane */}
