@@ -1,6 +1,8 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -8,15 +10,22 @@ body {
   margin: 0;
   background-color: #0a0a0a;
   color: #f5f5f5;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Indeterminate progress bar — a slice that sweeps across the track.
    Used for LLM/network waits where a true percentage is unknowable. */
 @keyframes indeterminate-slide {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(320%); }
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 /* Slim custom scrollbar for bounded list panes. */
@@ -45,14 +54,24 @@ body {
    Driven from here (not inside the .svg files) so an SVG optimizer can't strip it.
    Used by RobotHero (login) and RobotTyping (vibe search bar). */
 @keyframes robot-eq {
-  0%, 100% { transform: scaleY(0.25); }
-  50% { transform: scaleY(1); }
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 /* Antenna + note move together as one unit — straight up and down, no rotation —
    so no gap ever opens between the note and the green antenna. */
 @keyframes robot-note {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 .robot-eq {
   transform-box: fill-box;
@@ -62,6 +81,47 @@ body {
 .robot-note {
   animation: robot-note 1.7s ease-in-out infinite;
 }
+
+/* Curated-result "vibing" animation — notes drifting up + fading behind the
+   mascot, and the wide standalone visualizer bars below it (CuratedVisualizer
+   in RobotMascot.tsx). */
+@keyframes float-note {
+  0% {
+    transform: translateY(0) scale(0.9);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  85% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translateY(-92px) scale(1.05);
+    opacity: 0;
+  }
+}
+.float-note {
+  animation: float-note 4.6s ease-in-out infinite;
+}
+@keyframes viz-bar {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.viz-bar {
+  transform-origin: center bottom;
+  animation: viz-bar 1s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
-  .robot-eq, .robot-note { animation: none; }
+  .robot-eq,
+  .robot-note,
+  .float-note,
+  .viz-bar {
+    animation: none;
+  }
 }

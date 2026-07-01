@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCurate, type CuratePhase } from '../hooks/useCurate'
-import { RobotHero, RobotTyping } from './RobotMascot'
+import { RobotHero, RobotTyping, CuratedVisualizer } from './RobotMascot'
 import { LASTFM_API_KEY } from '../lib/config'
 import { fetchArtistGenres } from '../lib/lastfm'
 import { canonicalizeGenres } from '../lib/genres'
@@ -605,7 +605,7 @@ function FiltersPanel({
       </button>
 
       {open && (
-        <div className="custom-scrollbar flex max-h-[55vh] flex-col gap-5 overflow-y-auto border-t border-zinc-800 px-4 py-4">
+        <div className="custom-scrollbar flex max-h-[min(30rem,calc(100vh-26rem))] flex-col gap-5 overflow-y-auto border-t border-zinc-800 px-4 py-4">
           {/* Length */}
           <div className="flex flex-col gap-2">
             <FilterLabel>Playlist length</FilterLabel>
@@ -1008,6 +1008,8 @@ function CurateResult({
         {saving && <LoadingBar label="Creating your playlist on Spotify…" />}
 
         {saveError && <p className="text-red-400 text-sm text-center lg:text-left">{saveError}</p>}
+
+        <CuratedVisualizer />
       </div>
 
       {/* RIGHT: curated cards — bounded scroll pane */}
