@@ -12,6 +12,8 @@ export interface CurateState {
   error: AppError | null
   result: CuratedTrack[] | null
   vibe: string | null
+  // Last.fm genres per curated track id — captured during curation, reused for display.
+  genresByTrack: Map<string, string[]>
   curate: (vibe: string) => Promise<void>
   reset: () => void
 }
@@ -22,6 +24,7 @@ export function useCurate(library: Track[]): CurateState {
   const [error, setError] = useState<AppError | null>(null)
   const [result, setResult] = useState<CuratedTrack[] | null>(null)
   const [vibe, setVibe] = useState<string | null>(null)
+  const [genresByTrack, setGenresByTrack] = useState<Map<string, string[]>>(new Map())
 
   const curate = useCallback(
     async (vibe: string) => {
@@ -50,6 +53,8 @@ export function useCurate(library: Track[]): CurateState {
           ...c,
           genres: c.genres.length > 0 ? c.genres : (genreMap.get(c.artists[0]) ?? []),
         }))
+        // Keep the genres so the review screen can display them (no extra requests).
+        setGenresByTrack(new Map(enrichedCandidates.map((c) => [c.id, c.genres])))
 
         setPhase('curating')
         const res = await fetch('/api/curate', {
@@ -96,7 +101,8 @@ export function useCurate(library: Track[]): CurateState {
   const reset = useCallback(() => {
     setError(null)
     setResult(null)
+    setGenresByTrack(new Map())
   }, [])
 
-  return { loading, phase, error, result, vibe, curate, reset }
+  return { loading, phase, error, result, vibe, genresByTrack, curate, reset }
 }

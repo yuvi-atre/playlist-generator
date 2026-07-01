@@ -148,12 +148,16 @@ export function buildLibrary(
       const primaryArtistId = item.track.artists[0]?.id ?? ''
       const genres = artistMap.get(primaryArtistId)?.genres ?? []
       const year = parseInt(item.track.album.release_date.slice(0, 4), 10)
+      // images are ordered largest→smallest; the smallest (~64px) suits a thumbnail
+      const images = item.track.album.images
+      const albumArt = images.length ? images[images.length - 1].url : null
 
       return {
         id: item.track.id,
         name: item.track.name,
         artists: item.track.artists.map((a) => a.name),
         album: item.track.album.name,
+        albumArt,
         genres,
         year: isNaN(year) ? 0 : year,
         popularity: item.track.popularity,

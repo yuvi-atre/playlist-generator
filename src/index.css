@@ -19,6 +19,28 @@ body {
   100% { transform: translateX(320%); }
 }
 
+/* Slim custom scrollbar for bounded list panes. */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+  background-clip: content-box;
+}
+
 /* Robot mascot animation — equalizer bars bounce, antenna stretches, note bobs.
    Driven from here (not inside the .svg files) so an SVG optimizer can't strip it.
    Used by RobotHero (login) and RobotTyping (vibe search bar). */

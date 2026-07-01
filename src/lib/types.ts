@@ -5,6 +5,7 @@ export interface Track {
   name: string
   artists: string[]
   album: string
+  albumArt: string | null // small album cover URL (display only, comes free in /me/tracks)
   genres: string[]
   year: number
   popularity: number
@@ -35,6 +36,7 @@ export interface SpotifySavedTrackItem {
     album: {
       name: string
       release_date: string
+      images: Array<{ url: string; width: number; height: number }>
     }
     artists: Array<{ id: string; name: string }>
   }

@@ -55,6 +55,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             results={curate.result}
             tracks={tracks}
             vibe={curate.vibe ?? ''}
+            genresByTrack={curate.genresByTrack}
             getAccessToken={getAccessToken}
             onReset={curate.reset}
           />
@@ -127,6 +128,45 @@ function EmptyState({ onRefresh }: { onRefresh: () => void }) {
 
 function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+// ease-out-quart per the Impeccable motion spec: transform + opacity only.
+const EASE_QUART = 'ease-[cubic-bezier(0.165,0.84,0.44,1)]'
+
+// Album cover thumbnail. Comes free in the /me/tracks payload (no extra API call).
+// Lazy-loaded; reveals via opacity + scale; equalizer glyph as fallback.
+function AlbumArt({ url, size = 44 }: { url: string | null; size?: number }) {
+  const [loaded, setLoaded] = useState(false)
+  const [errored, setErrored] = useState(false)
+  const showImg = url && !errored
+
+  return (
+    <div
+      className="shrink-0 overflow-hidden rounded-md bg-zinc-800 ring-1 ring-white/5"
+      style={{ width: size, height: size }}
+    >
+      {showImg ? (
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          onError={() => setErrored(true)}
+          className={`h-full w-full object-cover transition duration-300 ${EASE_QUART} motion-reduce:transition-none`}
+          style={{ opacity: loaded ? 1 : 0, transform: loaded ? 'scale(1)' : 'scale(0.97)' }}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-zinc-600">
+          <svg viewBox="0 0 24 24" className="h-1/2 w-1/2" fill="currentColor" aria-hidden="true">
+            <rect x="4" y="10" width="3" height="10" rx="1.5" />
+            <rect x="10" y="5" width="3" height="15" rx="1.5" />
+            <rect x="16" y="8" width="3" height="12" rx="1.5" />
+          </svg>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Landing hero shown once the library is ready. "Get Started" swipes the hero
@@ -243,61 +283,67 @@ function LibraryStats({
   }
 
   return (
-    <div ref={rootRef} className="flex flex-col items-center gap-6 text-center w-full max-w-lg">
-      <h2 className="text-2xl font-semibold text-white">Your library is ready</h2>
+    <div ref={rootRef} className="w-full max-w-5xl grid gap-8 lg:grid-cols-[19rem_1fr] items-start">
+      {/* LEFT: library info + vibe prompt (sticky on desktop) */}
+      <div className="flex flex-col gap-5 lg:sticky lg:top-6">
+        <div className="flex flex-col gap-4 text-center lg:text-left">
+          <h2 className="text-2xl font-semibold text-white">Your library is ready</h2>
 
-      <div className="flex gap-8">
-        <Stat label="tracks" value={trackCount} />
-        <Stat label="artists" value={artistCount} />
-        {genreCount > 0 && <Stat label="genres" value={genreCount} />}
+          <div className="flex gap-8 justify-center lg:justify-start">
+            <Stat label="tracks" value={trackCount} />
+            <Stat label="artists" value={artistCount} />
+            {genreCount > 0 && <Stat label="genres" value={genreCount} />}
+          </div>
+
+          <div className="flex flex-col items-center lg:items-start gap-1">
+            {cachedDate && <p className="text-zinc-600 text-xs">Cached {cachedDate}</p>}
+            <button
+              onClick={onRefresh}
+              className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors"
+            >
+              Refresh library
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+          <div className="relative">
+            <RobotTyping
+              className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-7 h-7 transition-opacity duration-200 ${
+                showBot ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+            <input
+              type="text"
+              value={vibe}
+              onChange={(e) => setVibe(e.target.value)}
+              onFocus={() => setVibeFocused(true)}
+              onBlur={() => setVibeFocused(false)}
+              placeholder="Describe a vibe… (e.g. Minecraft with the boys)"
+              disabled={curating}
+              className={`w-full rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50 transition-all ${
+                showBot ? 'pl-11 pr-4' : 'px-4'
+              }`}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={curating || !vibe.trim()}
+            className="w-full px-5 py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+          >
+            {curating ? 'Curating…' : 'Generate'}
+          </button>
+        </form>
+
+        {curating && (
+          <LoadingBar label={curatePhase ? PHASE_LABELS[curatePhase] : 'Working…'} />
+        )}
+
+        {curateError && <p className="text-red-400 text-sm text-center lg:text-left">{curateError.message}</p>}
       </div>
 
-      {cachedDate && <p className="text-zinc-600 text-xs">Cached {cachedDate}</p>}
-
-      <button
-        onClick={onRefresh}
-        className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors"
-      >
-        Refresh library
-      </button>
-
-      <form onSubmit={handleSubmit} className="w-full flex gap-2 mt-2">
-        <div className="relative flex-1">
-          <RobotTyping
-            className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-7 h-7 transition-opacity duration-200 ${
-              showBot ? 'opacity-100' : 'opacity-0'
-            }`}
-          />
-          <input
-            type="text"
-            value={vibe}
-            onChange={(e) => setVibe(e.target.value)}
-            onFocus={() => setVibeFocused(true)}
-            onBlur={() => setVibeFocused(false)}
-            placeholder="Describe a vibe… (e.g. Minecraft with the boys)"
-            disabled={curating}
-            className={`w-full rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50 transition-all ${
-              showBot ? 'pl-11 pr-4' : 'px-4'
-            }`}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={curating || !vibe.trim()}
-          className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-        >
-          {curating ? 'Curating…' : 'Generate'}
-        </button>
-      </form>
-
-      {curating && (
-        <LoadingBar label={curatePhase ? PHASE_LABELS[curatePhase] : 'Working…'} />
-      )}
-
-      {curateError && <p className="text-red-400 text-sm">{curateError.message}</p>}
-
-      {/* Song browser */}
-      <div className="w-full mt-2 flex flex-col gap-3 text-left">
+      {/* RIGHT: song browser — bounded scroll pane */}
+      <div className="flex flex-col gap-3 min-w-0 text-left">
         <input
           type="text"
           value={search}
@@ -310,26 +356,27 @@ function LibraryStats({
           <p className="text-zinc-500 text-xs">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>
         )}
 
-        <ul className="flex flex-col gap-1">
+        <ul className="custom-scrollbar flex flex-col gap-1 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-11rem)]">
           {paginated.map((t) => (
-            <li key={t.id} className="flex items-baseline justify-between gap-4 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors">
-              <div className="min-w-0">
+            <li key={t.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors">
+              <AlbumArt url={t.albumArt} size={36} />
+              <div className="min-w-0 flex-1">
                 <span className="text-white text-sm truncate block">{t.name}</span>
                 <span className="text-zinc-500 text-xs truncate block">{t.artists.join(', ')}</span>
               </div>
               <span className="text-zinc-600 text-xs shrink-0">{t.year || '—'}</span>
             </li>
           ))}
-        </ul>
 
-        {hasMore && (
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors self-center"
-          >
-            Show more
-          </button>
-        )}
+          {hasMore && (
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors self-center mt-2"
+            >
+              Show more
+            </button>
+          )}
+        </ul>
       </div>
     </div>
   )
@@ -339,16 +386,22 @@ function CurateResult({
   results,
   tracks,
   vibe,
+  genresByTrack,
   getAccessToken,
   onReset,
 }: {
   results: CuratedTrack[]
   tracks: Track[]
   vibe: string
+  genresByTrack: Map<string, string[]>
   getAccessToken: () => Promise<string>
   onReset: () => void
 }) {
   const trackMap = useMemo(() => new Map(tracks.map((t) => [t.id, t])), [tracks])
+  const genreCount = useMemo(
+    () => new Set(results.flatMap((r) => genresByTrack.get(r.id) ?? [])).size,
+    [results, genresByTrack]
+  )
   const listRef = useRef<HTMLUListElement>(null)
   const [playlistName, setPlaylistName] = useState(vibe || 'My Vibe Playlist')
 
@@ -359,10 +412,10 @@ function CurateResult({
       if (!listRef.current) return
       gsap.from(listRef.current.children, {
         opacity: 0,
-        y: 12,
-        duration: 0.4,
-        ease: 'power2.out',
-        stagger: 0.035,
+        y: 8,
+        duration: 0.3,
+        ease: 'expo.out',
+        stagger: 0.03,
       })
     },
     { scope: listRef, dependencies: [results] }
@@ -387,62 +440,99 @@ function CurateResult({
   }
 
   return (
-    <div className="flex flex-col items-center gap-6 w-full max-w-lg">
-      <div className="flex items-center justify-between w-full">
-        <h2 className="text-xl font-semibold text-white">{results.length} tracks curated</h2>
-        <button
-          onClick={onReset}
-          className="text-zinc-500 hover:text-zinc-300 text-sm underline transition-colors"
-        >
-          Start over
-        </button>
-      </div>
-
-      {savedUrl ? (
-        <div className="w-full flex flex-col items-center gap-3 py-4">
-          <p className="text-green-400 text-sm font-medium">Playlist saved to Spotify!</p>
-          <a
-            href={savedUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
-          >
-            Open in Spotify
-          </a>
-        </div>
-      ) : (
-        <div className="w-full flex gap-2">
-          <input
-            type="text"
-            value={playlistName}
-            onChange={(e) => setPlaylistName(e.target.value)}
-            disabled={saving}
-            className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
-          />
+    <div className="w-full max-w-5xl grid gap-8 lg:grid-cols-[19rem_1fr] items-start">
+      {/* LEFT: summary + save (sticky on desktop) */}
+      <div className="flex flex-col gap-5 lg:sticky lg:top-6">
+        <div className="flex flex-col gap-1 text-center lg:text-left">
+          <h2 className="text-xl font-semibold text-white">{results.length} tracks curated</h2>
+          {vibe && <p className="text-zinc-500 text-sm truncate">for “{vibe}”</p>}
+          {genreCount > 0 && (
+            <p className="text-zinc-600 text-xs">
+              spanning {genreCount} genre{genreCount !== 1 ? 's' : ''}
+            </p>
+          )}
           <button
-            onClick={() => void handleSave()}
-            disabled={saving || !playlistName.trim()}
-            className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors shrink-0"
+            onClick={onReset}
+            className="mt-1 self-center lg:self-start text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors"
           >
-            {saving ? 'Saving…' : 'Save to Spotify'}
+            Start over
           </button>
         </div>
-      )}
 
-      {saving && <LoadingBar label="Creating your playlist on Spotify…" />}
+        {savedUrl ? (
+          <div className="flex flex-col items-center lg:items-start gap-3">
+            <p className="text-green-400 text-sm font-medium">Playlist saved to Spotify!</p>
+            <a
+              href={savedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
+            >
+              Open in Spotify
+            </a>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <input
+              type="text"
+              value={playlistName}
+              onChange={(e) => setPlaylistName(e.target.value)}
+              disabled={saving}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
+            />
+            <button
+              onClick={() => void handleSave()}
+              disabled={saving || !playlistName.trim()}
+              className="w-full px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+            >
+              {saving ? 'Saving…' : 'Save to Spotify'}
+            </button>
+          </div>
+        )}
 
-      {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
+        {saving && <LoadingBar label="Creating your playlist on Spotify…" />}
 
-      <ul ref={listRef} className="w-full flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
-        {results.map(({ id, reason }) => {
+        {saveError && <p className="text-red-400 text-sm text-center lg:text-left">{saveError}</p>}
+      </div>
+
+      {/* RIGHT: curated cards — bounded scroll pane */}
+      <ul ref={listRef} className="custom-scrollbar w-full flex flex-col gap-2 min-w-0 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-9rem)]">
+        {results.map(({ id, reason }, i) => {
           const track = trackMap.get(id)
           return (
-            <li key={id} className="flex flex-col gap-1 border border-zinc-800 rounded-lg px-4 py-3">
-              <span className="text-white text-sm font-medium">{track?.name ?? id}</span>
-              <span className="text-zinc-500 text-xs">
-                {track?.artists.join(', ')} · {track?.year}
+            <li
+              key={id}
+              className={`group flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3 transition duration-200 ${EASE_QUART} hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900 motion-reduce:transition-none motion-reduce:hover:translate-y-0`}
+            >
+              <span className="w-5 shrink-0 pt-0.5 text-right text-xs tabular-nums text-zinc-600">
+                {i + 1}
               </span>
-              <span className="text-zinc-400 text-xs italic">{reason}</span>
+              <AlbumArt url={track?.albumArt ?? null} />
+              <div className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-white">
+                  {track?.name ?? id}
+                </span>
+                <span className="block truncate text-xs text-zinc-500">
+                  {track?.artists.join(', ')} · {track?.year}
+                </span>
+                {(genresByTrack.get(id) ?? []).length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {(genresByTrack.get(id) ?? []).slice(0, 3).map((g) => (
+                      <span
+                        key={g}
+                        className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] leading-tight text-zinc-400"
+                      >
+                        {g}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {reason && (
+                  <p className="mt-1.5 border-l-2 border-zinc-700 pl-2 text-xs italic text-zinc-400">
+                    {reason}
+                  </p>
+                )}
+              </div>
             </li>
           )
         })}
