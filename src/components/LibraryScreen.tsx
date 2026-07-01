@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useCurate } from '../hooks/useCurate'
+import { useCurate, type CuratePhase } from '../hooks/useCurate'
 import type { LibraryState } from '../hooks/useLibrary'
 import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
 import type { AppError, CuratedTrack, SpotifyUser, Track } from '../lib/types'
@@ -59,6 +59,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             fetchedAt={fetchedAt}
             onRefresh={() => void library.load(true)}
             curating={curate.loading}
+            curatePhase={curate.phase}
             curateError={curate.error}
             onCurate={(vibe) => void curate.curate(vibe)}
           />
@@ -124,6 +125,7 @@ function LibraryStats({
   fetchedAt,
   onRefresh,
   curating,
+  curatePhase,
   curateError,
   onCurate,
 }: {
@@ -134,6 +136,7 @@ function LibraryStats({
   fetchedAt: number | null
   onRefresh: () => void
   curating: boolean
+  curatePhase: CuratePhase | null
   curateError: AppError | null
   onCurate: (vibe: string) => void
 }) {
@@ -197,6 +200,10 @@ function LibraryStats({
           {curating ? 'Curating…' : 'Generate'}
         </button>
       </form>
+
+      {curating && (
+        <LoadingBar label={curatePhase ? PHASE_LABELS[curatePhase] : 'Working…'} />
+      )}
 
       {curateError && <p className="text-red-400 text-sm">{curateError.message}</p>}
 
@@ -316,6 +323,8 @@ function CurateResult({
         </div>
       )}
 
+      {saving && <LoadingBar label="Creating your playlist on Spotify…" />}
+
       {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
 
       <ul className="w-full flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
@@ -332,6 +341,25 @@ function CurateResult({
           )
         })}
       </ul>
+    </div>
+  )
+}
+
+const PHASE_LABELS: Record<CuratePhase, string> = {
+  matching: 'Finding matches in your library…',
+  enriching: 'Reading genres…',
+  curating: 'Curating with AI — this takes a few seconds…',
+}
+
+// Indeterminate bar: a slice sweeps across the track. Honest for LLM/network
+// waits where a real percentage is unknowable.
+function LoadingBar({ label }: { label?: string }) {
+  return (
+    <div className="w-full flex flex-col gap-2">
+      {label && <span className="text-zinc-400 text-xs text-center">{label}</span>}
+      <div className="relative h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+        <div className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-green-500 animate-[indeterminate-slide_1.3s_ease-in-out_infinite]" />
+      </div>
     </div>
   )
 }

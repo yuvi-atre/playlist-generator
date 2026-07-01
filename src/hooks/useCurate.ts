@@ -4,8 +4,11 @@ import { fetchArtistGenres } from '../lib/lastfm'
 import { preFilter } from '../lib/preFilter'
 import type { AppError, CurateResponse, CuratedTrack, Track } from '../lib/types'
 
+export type CuratePhase = 'matching' | 'enriching' | 'curating'
+
 export interface CurateState {
   loading: boolean
+  phase: CuratePhase | null
   error: AppError | null
   result: CuratedTrack[] | null
   vibe: string | null
@@ -15,6 +18,7 @@ export interface CurateState {
 
 export function useCurate(library: Track[]): CurateState {
   const [loading, setLoading] = useState(false)
+  const [phase, setPhase] = useState<CuratePhase | null>(null)
   const [error, setError] = useState<AppError | null>(null)
   const [result, setResult] = useState<CuratedTrack[] | null>(null)
   const [vibe, setVibe] = useState<string | null>(null)
@@ -22,6 +26,7 @@ export function useCurate(library: Track[]): CurateState {
   const curate = useCallback(
     async (vibe: string) => {
       setLoading(true)
+      setPhase('matching')
       setError(null)
       setResult(null)
       setVibe(vibe)
@@ -38,6 +43,7 @@ export function useCurate(library: Track[]): CurateState {
         }
 
         // Enrich candidates with Last.fm genres (non-fatal if it fails)
+        setPhase('enriching')
         const uniqueArtists = [...new Set(candidates.map((c) => c.artists[0]).filter(Boolean))]
         const genreMap = await fetchArtistGenres(uniqueArtists, LASTFM_API_KEY).catch(() => new Map<string, string[]>())
         const enrichedCandidates = candidates.map((c) => ({
@@ -45,6 +51,7 @@ export function useCurate(library: Track[]): CurateState {
           genres: c.genres.length > 0 ? c.genres : (genreMap.get(c.artists[0]) ?? []),
         }))
 
+        setPhase('curating')
         const res = await fetch('/api/curate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -80,6 +87,7 @@ export function useCurate(library: Track[]): CurateState {
         setError({ code: 'unknown', message: 'Network error — check your connection and try again.' })
       } finally {
         setLoading(false)
+        setPhase(null)
       }
     },
     [library]
@@ -90,5 +98,5 @@ export function useCurate(library: Track[]): CurateState {
     setResult(null)
   }, [])
 
-  return { loading, error, result, vibe, curate, reset }
+  return { loading, phase, error, result, vibe, curate, reset }
 }
