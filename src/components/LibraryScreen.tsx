@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCurate, type CuratePhase } from '../hooks/useCurate'
-import { RobotTyping } from './RobotMascot'
+import { RobotHero, RobotTyping } from './RobotMascot'
 import type { LibraryState } from '../hooks/useLibrary'
 import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
 import type { AppError, CuratedTrack, SpotifyUser, Track } from '../lib/types'
@@ -17,6 +17,8 @@ interface Props {
 export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props) {
   const { tracks, fetchedAt, loading, progress, error } = library
   const curate = useCurate(tracks)
+  // Show the hero landing first; the prompt view is revealed on "Get Started".
+  const [started, setStarted] = useState(false)
 
   const uniqueArtists = new Set(tracks.flatMap((t) => t.artists)).size
   const uniqueGenres = new Set(tracks.flatMap((t) => t.genres)).size
@@ -56,6 +58,8 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             getAccessToken={getAccessToken}
             onReset={curate.reset}
           />
+        ) : !started ? (
+          <GetStartedHero trackCount={tracks.length} onStart={() => setStarted(true)} />
         ) : (
           <LibraryStats
             tracks={tracks}
@@ -121,6 +125,62 @@ function EmptyState({ onRefresh }: { onRefresh: () => void }) {
   )
 }
 
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+// Landing hero shown once the library is ready. "Get Started" swipes the hero
+// up and out, then LibraryStats slides up into place.
+function GetStartedHero({ trackCount, onStart }: { trackCount: number; onStart: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      if (prefersReducedMotion() || !ref.current) return
+      gsap.from(ref.current.children, {
+        y: 16,
+        opacity: 0,
+        duration: 0.5,
+        ease: 'power3.out',
+        stagger: 0.08,
+      })
+    },
+    { scope: ref }
+  )
+
+  const handleStart = () => {
+    if (prefersReducedMotion() || !ref.current) {
+      onStart()
+      return
+    }
+    gsap.to(ref.current, {
+      y: -60,
+      opacity: 0,
+      duration: 0.4,
+      ease: 'power2.in',
+      onComplete: onStart,
+    })
+  }
+
+  return (
+    <div ref={ref} className="flex flex-col items-center gap-5 text-center">
+      <RobotHero className="w-40 h-auto" />
+      <h2 className="text-3xl font-semibold tracking-tight text-white">Playlist Generator</h2>
+      <p className="text-zinc-400 max-w-sm text-sm leading-relaxed">
+        {trackCount.toLocaleString()} liked songs ready. Describe a vibe and get a curated playlist
+        pulled straight from your library.
+      </p>
+      <button
+        onClick={handleStart}
+        className="mt-1 rounded-full bg-green-600 hover:bg-green-500 px-8 py-3 text-sm font-semibold
+                   text-white transition-colors"
+      >
+        Get Started
+      </button>
+    </div>
+  )
+}
+
 const PAGE_SIZE = 50
 
 function LibraryStats({
@@ -153,6 +213,16 @@ function LibraryStats({
   const showBot = vibeFocused || vibe.trim().length > 0 || curating
   const cachedDate = fetchedAt ? new Date(fetchedAt).toLocaleString() : null
 
+  // Slide up into place after the hero swipes away.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useGSAP(
+    () => {
+      if (prefersReducedMotion() || !rootRef.current) return
+      gsap.from(rootRef.current, { y: 50, opacity: 0, duration: 0.5, ease: 'power3.out' })
+    },
+    { scope: rootRef }
+  )
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return tracks
@@ -173,7 +243,7 @@ function LibraryStats({
   }
 
   return (
-    <div className="flex flex-col items-center gap-6 text-center w-full max-w-lg">
+    <div ref={rootRef} className="flex flex-col items-center gap-6 text-center w-full max-w-lg">
       <h2 className="text-2xl font-semibold text-white">Your library is ready</h2>
 
       <div className="flex gap-8">
