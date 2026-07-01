@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /callback
+Disallow: /api/
+
+Sitemap: https://playlist-generator-theta-one.vercel.app/sitemap.xml

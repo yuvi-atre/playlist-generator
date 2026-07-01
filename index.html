@@ -9,6 +9,9 @@
       name="description"
       content="Describe a vibe and get a curated Spotify playlist pulled straight from your liked songs."
     />
+    <link rel="canonical" href="https://playlist-generator-theta-one.vercel.app/" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0a0a0a" />
 
     <!-- Open Graph / social share -->
     <meta property="og:type" content="website" />
@@ -36,6 +39,20 @@
       name="twitter:image"
       content="https://playlist-generator-theta-one.vercel.app/og-image.png"
     />
+
+    <!-- Structured data for search engines -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Playlist Generator",
+        "url": "https://playlist-generator-theta-one.vercel.app/",
+        "description": "Describe a vibe and get a curated Spotify playlist pulled straight from your liked songs.",
+        "applicationCategory": "MusicApplication",
+        "operatingSystem": "Web",
+        "image": "https://playlist-generator-theta-one.vercel.app/og-image.png"
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
