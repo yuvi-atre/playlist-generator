@@ -912,6 +912,18 @@ function CurateResult({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied'>('idle')
 
+  // Fade + rise the save-state block in whenever it swaps (name input/Save
+  // button -> the success card) so clicking Save doesn't cut over instantly.
+  const saveStateRef = useRef<HTMLDivElement>(null)
+  useGSAP(
+    () => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      if (!saveStateRef.current) return
+      gsap.from(saveStateRef.current, { opacity: 0, y: 8, duration: 0.35, ease: 'expo.out' })
+    },
+    { scope: saveStateRef, dependencies: [savedUrl] }
+  )
+
   async function handleSave() {
     setSaving(true)
     setSaveError(null)
@@ -977,52 +989,54 @@ function CurateResult({
           </button>
         </div>
 
-        {savedUrl ? (
-          <div className="success-card flex flex-col items-center lg:items-start gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <PlaylistSuccess />
-            <div className="success-row flex items-center gap-2">
-              <SuccessCheck />
-              <p className="text-white text-sm font-semibold">Playlist saved to Spotify!</p>
+        <div ref={saveStateRef}>
+          {savedUrl ? (
+            <div className="success-card flex flex-col items-center lg:items-start gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+              <PlaylistSuccess />
+              <div className="success-row flex items-center gap-2">
+                <SuccessCheck />
+                <p className="text-white text-sm font-semibold">Playlist saved to Spotify!</p>
+              </div>
+              <div className="flex w-full gap-2">
+                <a
+                  href={savedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 px-5 py-4 rounded-xl bg-green-600 hover:bg-green-500 text-white text-base font-semibold text-center transition-colors"
+                >
+                  Open in Spotify
+                </a>
+                <button
+                  onClick={() => void handleShare()}
+                  className="flex-1 px-5 py-4 rounded-xl border border-zinc-700 hover:border-zinc-500 text-white text-base font-semibold transition-colors"
+                >
+                  {shareStatus === 'copied'
+                    ? 'Link copied!'
+                    : shareStatus === 'shared'
+                      ? 'Shared!'
+                      : 'Share'}
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <a
-                href={savedUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-3.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-base font-semibold transition-colors"
-              >
-                Open in Spotify
-              </a>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <input
+                type="text"
+                value={playlistName}
+                onChange={(e) => setPlaylistName(e.target.value)}
+                disabled={saving}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-base text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
+              />
               <button
-                onClick={() => void handleShare()}
-                className="px-5 py-3.5 rounded-xl border border-zinc-700 hover:border-zinc-500 text-white text-base font-semibold transition-colors"
+                onClick={() => void handleSave()}
+                disabled={saving || !playlistName.trim()}
+                className="w-full px-5 py-4 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-base font-semibold transition-colors"
               >
-                {shareStatus === 'copied'
-                  ? 'Link copied!'
-                  : shareStatus === 'shared'
-                    ? 'Shared!'
-                    : 'Share'}
+                {saving ? 'Saving…' : 'Save to Spotify'}
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <input
-              type="text"
-              value={playlistName}
-              onChange={(e) => setPlaylistName(e.target.value)}
-              disabled={saving}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-base text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
-            />
-            <button
-              onClick={() => void handleSave()}
-              disabled={saving || !playlistName.trim()}
-              className="w-full px-5 py-4 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-base font-semibold transition-colors"
-            >
-              {saving ? 'Saving…' : 'Save to Spotify'}
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {saving && <LoadingBar label="Creating your playlist on Spotify…" />}
 
