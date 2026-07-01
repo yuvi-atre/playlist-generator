@@ -1,5 +1,5 @@
 import { canonicalizeGenre } from './genres'
-import type { CandidateTrack, CurateFilters, Track } from './types'
+import type { CandidateTrack, CurateFilters, Track, VibeExpansion } from './types'
 
 const MAX_CANDIDATES = 150
 const INCLUDE_ARTIST_BOOST = 8 // #1 adaptive cap: rank an explicitly-included artist's tracks high
@@ -252,7 +252,8 @@ function normalizeTerms(terms: string[]): string[] {
 export function preFilter(
   library: Track[],
   vibe: string,
-  filters?: CurateFilters
+  filters?: CurateFilters,
+  expansion?: VibeExpansion | null
 ): CandidateTrack[] {
   if (library.length === 0) return []
 
@@ -284,6 +285,18 @@ export function preFilter(
   const eraRanges: Array<[number, number]> = []
   for (const { pattern, range } of ERA_PATTERNS) {
     if (pattern.test(vibe)) eraRanges.push(range)
+  }
+
+  // Haiku vibe-expansion (optional): augment the fixed keyword map so off-dictionary
+  // vibes still get a genre/era signal. Treated as soft signals, same as the built-in ones.
+  if (expansion) {
+    for (const g of expansion.genres) {
+      const kw = g.toLowerCase().trim()
+      if (kw) genreKeywords.add(kw)
+    }
+    for (const start of expansion.decades) {
+      if (Number.isFinite(start)) eraRanges.push([start, start + 9])
+    }
   }
 
   const includeArtists = f?.includeArtists ?? []

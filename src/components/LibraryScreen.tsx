@@ -1057,6 +1057,7 @@ function CurateResult({
 }
 
 const PHASE_LABELS: Record<CuratePhase, string> = {
+  expanding: 'Understanding your vibe…',
   matching: 'Finding matches in your library…',
   enriching: 'Reading genres…',
   curating: 'Curating with AI — this takes a few seconds…',

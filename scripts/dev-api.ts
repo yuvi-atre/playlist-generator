@@ -2,6 +2,12 @@ import http from 'node:http'
 
 const PORT = 3001
 
+// Map request path → serverless handler module. Mirrors the files under api/.
+const ROUTES: Record<string, string> = {
+  '/api/curate': '../api/curate.ts',
+  '/api/expand-vibe': '../api/expand-vibe.ts',
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -13,7 +19,8 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  if (req.url !== '/api/curate' || req.method !== 'POST') {
+  const route = req.url ? ROUTES[req.url] : undefined
+  if (!route || req.method !== 'POST') {
     res.writeHead(404, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'Not found' }))
     return
@@ -55,7 +62,7 @@ const server = http.createServer(async (req, res) => {
   })
 
   try {
-    const { default: handler } = await import('../api/curate.ts')
+    const { default: handler } = await import(route)
     await handler(vReq as never, vRes as never)
   } catch (err) {
     console.error(err)

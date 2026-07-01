@@ -2,9 +2,57 @@ import { useCallback, useState } from 'react'
 import { LASTFM_API_KEY } from '../lib/config'
 import { fetchArtistGenres } from '../lib/lastfm'
 import { preFilter } from '../lib/preFilter'
-import type { AppError, CurateFilters, CurateResponse, CuratedTrack, Track } from '../lib/types'
+import type {
+  AppError,
+  CurateFilters,
+  CurateResponse,
+  CuratedTrack,
+  Track,
+  VibeExpansion,
+} from '../lib/types'
 
-export type CuratePhase = 'matching' | 'enriching' | 'curating'
+export type CuratePhase = 'expanding' | 'matching' | 'enriching' | 'curating'
+
+// Haiku vibe-expansion, cached per-vibe in localStorage (cheap call, but no reason
+// to repeat it for the same prompt). Non-fatal: any failure returns null and
+// curation proceeds on the built-in keyword map alone.
+const EXPANSION_CACHE_KEY = 'pg_vibe_expansion'
+
+function loadExpansionCache(): Record<string, VibeExpansion> {
+  try {
+    return JSON.parse(localStorage.getItem(EXPANSION_CACHE_KEY) ?? '{}') as Record<
+      string,
+      VibeExpansion
+    >
+  } catch {
+    return {}
+  }
+}
+
+async function fetchVibeExpansion(vibe: string): Promise<VibeExpansion | null> {
+  const key = vibe.trim().toLowerCase()
+  const cache = loadExpansionCache()
+  if (cache[key]) return cache[key]
+
+  try {
+    const res = await fetch('/api/expand-vibe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vibe }),
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as VibeExpansion
+    cache[key] = data
+    try {
+      localStorage.setItem(EXPANSION_CACHE_KEY, JSON.stringify(cache))
+    } catch {
+      // cache is a nice-to-have; ignore quota errors
+    }
+    return data
+  } catch {
+    return null
+  }
+}
 
 export interface CurateState {
   loading: boolean
@@ -41,13 +89,17 @@ export function useCurate(library: Track[]): CurateState {
   const curate = useCallback(
     async (vibe: string, filters?: CurateFilters) => {
       setLoading(true)
-      setPhase('matching')
+      setPhase('expanding')
       setError(null)
       setResult(null)
       setVibe(vibe)
 
       try {
-        const candidates = preFilter(library, vibe, filters)
+        // Expand the vibe into genre/era hints first (non-fatal), then pre-filter.
+        const expansion = await fetchVibeExpansion(vibe)
+
+        setPhase('matching')
+        const candidates = preFilter(library, vibe, filters, expansion)
 
         if (candidates.length === 0) {
           setError({

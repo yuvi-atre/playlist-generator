@@ -74,6 +74,13 @@ export const DEFAULT_FILTERS: CurateFilters = {
   length: 'medium',
 }
 
+// Haiku vibe-expansion: turns a free-text vibe into concrete filter signals so
+// off-dictionary vibes ("rainy Tokyo rooftop") still produce a genre signal.
+export interface VibeExpansion {
+  genres: string[] // lowercase genre keywords added to preFilter's genre matching
+  decades: number[] // decade start years (e.g. 1990) → soft era scoring ranges
+}
+
 // What we POST to /api/curate
 export interface CurateRequest {
   vibe: string
