@@ -3,10 +3,10 @@
 The PRD is the static spec. This file tracks live build progress. Update it as you go.
 
 ## Status
-**Phase:** Steps 1–7 complete + perf/UX + a branding/visual overhaul (2026-06-30). Full flow verified
-end-to-end: vibe → curated playlist → real playlist saved to Spotify with all tracks. **Deployed to
-prod** (latest commit live on https://playlist-generator-theta-one.vercel.app via `npx vercel --prod
---yes`). Latest commit: `d6c3f20`.
+**Phase:** Steps 1–7 complete + perf/UX + branding overhaul + v2 curation features (filters, genre
+normalization, Haiku vibe-expansion). Full flow verified end-to-end: vibe → curated playlist → real
+playlist saved to Spotify. **Deployed to prod** (live on https://playlist-generator-theta-one.vercel.app
+via `npx vercel --prod --yes`). Latest commit: `0db9163`.
 
 ## Live URL
 https://playlist-generator-theta-one.vercel.app
@@ -137,7 +137,7 @@ All committed (`ce47460`) and deployed.
   free/local)**; #5 candidate count. Full detail in the `project_roadmap` memory.
 
 ## Session 2026-07-01 (cont.) — search/playlist filters + genre normalization
-Committed to `main` (`53be24d`, `5a2cd85`); NOT yet deployed to prod.
+Committed to `main` (`53be24d`, `5a2cd85`); DEPLOYED to prod (see later session).
 - **Filters** (`src/lib/types.ts` `CurateFilters`, `preFilter.ts`, `useCurate.ts`, `LibraryScreen.tsx`
   `FiltersPanel`): include/exclude genres, include/exclude artists, decade gate, playlist length.
   HARD gates applied in preFilter BEFORE scoring (AND across dims, OR within); vibe ranks the survivors.
@@ -155,15 +155,30 @@ Committed to `main` (`53be24d`, `5a2cd85`); NOT yet deployed to prod.
   pass** (NOT started — next session). Note: `localhost` vs `127.0.0.1` split the OAuth `sessionStorage`
   and caused "State mismatch — CSRF"; do the whole dev flow on **127.0.0.1:5173** (matches redirect URI).
 
-## Next step (open ideas)
-- **Haiku vibe-expansion pass (CHOSEN, not started):** one `claude-haiku-4-5` call turns any free-text
-  vibe into genre/era/mood hints BEFORE preFilter, so off-dictionary vibes (e.g. "rainy Tokyo rooftop")
-  don't fall back to popularity. Design: new `/api/expand-vibe` serverless endpoint (key stays server-
-  side); `useCurate` calls it first (new 'expanding' phase) and passes hints into `preFilter` to augment
-  `genreKeywords`/`eraRanges`; cache expansion per-vibe in localStorage; ~$0.0003/playlist (roadmap-
-  approved to route expansion to Haiku, not a 2nd Sonnet call). Was about to consult the `claude-api`
-  skill for exact Haiku model id / structured-output params — do that first.
-- **Deploy pending:** the two commits above are on `main` but NOT on prod yet (`npx vercel --prod --yes`).
+## Session 2026-07-01 (cont.) — Haiku vibe-expansion + deploy + layout/mascot
+All committed to `main` and DEPLOYED to prod (`0db9163` live; `git push origin main` also done).
+- **Haiku vibe-expansion (DONE, `6056e1e`):** `api/expand-vibe.ts` POST `{ vibe }` → `{ genres, decades }`
+  via `claude-haiku-4-5-20251001` (structured JSON, mirrors curate.ts params; ~$0.0003/call). `useCurate`
+  runs it FIRST (new `expanding` phase), caches per-vibe in localStorage (`pg_vibe_expansion`), and is
+  fully NON-FATAL (failure → null → old dictionary behavior). `preFilter(library, vibe, filters, expansion)`
+  merges the hints into `genreKeywords`/`eraRanges`. `scripts/dev-api.ts` now routes by path so both
+  endpoints work locally. ⚠️ Not runtime-verified that Haiku accepts the structured-output params — if it
+  rejects them the endpoint 500s and curation silently degrades; check Vercel function logs on an
+  off-dictionary vibe. `dev:api` needs a restart to pick up the new endpoint (no hot-reload).
+- **Deployed to prod** via `npx vercel --prod --yes` (all env vars incl. `ANTHROPIC_API_KEY` already set;
+  new function deploys automatically). Prod OAuth uses the vercel URL, so no localhost/127 issue there.
+- **Layout fix (`03c40bb`):** filters sat between the vibe input and Generate with BrandBanner last, so
+  expanding filters pushed both off-screen. Reordered left column → BrandBanner top, Generate under the
+  input, Filters last. Widened to `max-w-7xl` / `26rem` left col / `gap-12`.
+- **Filters cap + CuratedVisualizer (`0db9163`):** panel cap tightened to `min(30rem,calc(100vh-26rem))`
+  so it scrolls internally and the left column stays viewport-bounded (don't lengthen the song list to
+  match — cap the tall element). Integrated the Claude-design **`CuratedVisualizer`** (`RobotMascot.tsx`):
+  hero mascot + floating notes + wide visualizer row, in the space below Save-to-Spotify on the review
+  screen. New `float-note`/`viz-bar` keyframes in `index.css` (reduced-motion guarded). NOTE: the 3 design
+  files were dropped at repo ROOT built on a PRE-filters base — diffed out only the new bits; deleted the
+  root copies. Future design drops: base them on current deployed state to avoid stale diffs.
+- **oxlint schema fix (`c10a352`):** `.oxlintrc.json` `$schema` → unpkg URL (the relative node_modules
+  path failed under VSCode's `git:` scheme in diff views).
 
 ## Next step (older open ideas, none started)
 - **Search filtering #3 + #4** — DONE (`preFilter.ts`, knobs are named constants). Live `111fdbd`.
