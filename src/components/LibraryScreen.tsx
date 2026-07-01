@@ -561,6 +561,26 @@ function FiltersPanel({
   disabled: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Floating dropdown, not inline content: expanding it must never shift the
+  // Generate button or push the page around, on any viewport height. Close on
+  // outside click / Escape, like any other popover.
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
 
   const gateCount =
     filters.includeGenres.length +
@@ -587,7 +607,7 @@ function FiltersPanel({
   const clearAll = () => onChange({ ...DEFAULT_FILTERS, length: filters.length })
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
+    <div ref={panelRef} className="relative rounded-xl border border-zinc-800 bg-zinc-900/40">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -605,7 +625,7 @@ function FiltersPanel({
       </button>
 
       {open && (
-        <div className="custom-scrollbar flex max-h-[min(30rem,calc(100vh-26rem))] flex-col gap-5 overflow-y-auto border-t border-zinc-800 px-4 py-4">
+        <div className="custom-scrollbar absolute left-0 right-0 top-full z-30 mt-2 flex max-h-[60vh] flex-col gap-5 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 shadow-2xl">
           {/* Length */}
           <div className="flex flex-col gap-2">
             <FilterLabel>Playlist length</FilterLabel>
