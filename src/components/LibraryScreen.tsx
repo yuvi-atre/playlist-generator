@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import { useCurate, type CuratePhase } from '../hooks/useCurate'
 import type { LibraryState } from '../hooks/useLibrary'
 import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
@@ -260,7 +262,24 @@ function CurateResult({
   onReset: () => void
 }) {
   const trackMap = useMemo(() => new Map(tracks.map((t) => [t.id, t])), [tracks])
+  const listRef = useRef<HTMLUListElement>(null)
   const [playlistName, setPlaylistName] = useState(vibe || 'My Vibe Playlist')
+
+  // Stagger the curated result cards in. Respects reduced-motion.
+  useGSAP(
+    () => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      if (!listRef.current) return
+      gsap.from(listRef.current.children, {
+        opacity: 0,
+        y: 12,
+        duration: 0.4,
+        ease: 'power2.out',
+        stagger: 0.035,
+      })
+    },
+    { scope: listRef, dependencies: [results] }
+  )
   const [saving, setSaving] = useState(false)
   const [savedUrl, setSavedUrl] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -327,7 +346,7 @@ function CurateResult({
 
       {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
 
-      <ul className="w-full flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
+      <ul ref={listRef} className="w-full flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
         {results.map(({ id, reason }) => {
           const track = trackMap.get(id)
           return (
