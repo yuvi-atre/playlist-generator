@@ -2,6 +2,27 @@ import type { CandidateTrack, Track } from './types'
 
 const MAX_CANDIDATES = 150
 
+// ── Scoring knobs (tune these) ────────────────────────────────────────────────
+const GENRE_MATCH_SCORE = 3 // per matching genre string…
+const MAX_GENRE_MATCHES = 3 // …counted at most this many times (#3: cap runaway genre score)
+const ERA_SCORE = 2
+const ARTIST_NAME_SCORE = 5 // vibe token appears in an artist name
+const NAME_MATCH_SCORE = 1 // vibe token appears in the track title
+const POPULARITY_WEIGHT = 1 // soft tiebreak: popularity (0–100) → up to +1 (#3: less mainstream bias)
+const VARIETY_WEIGHT = 0.6 // per-(vibe,track) jitter so ties vary by prompt (#3)
+const MAX_PER_ARTIST = 3 // #4: at most N tracks per primary artist in the candidate set
+
+// Deterministic [0,1) hash (FNV-1a) — stable for a given (vibe, track) so results
+// are reproducible per prompt but differ across prompts.
+function hashUnit(str: string): number {
+  let h = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return ((h >>> 0) % 100000) / 100000
+}
+
 // Vibe keyword → Spotify genre substrings (lowercase, substring-matched against track genres)
 const VIBE_TO_GENRES: Record<string, string[]> = {
   // Activities / contexts
@@ -108,22 +129,25 @@ function scoreTrack(
 ): number {
   let s = 0
 
-  // Genre match — primary signal, +3 per matching genre string
+  // Genre match — primary signal. Count each genre string at most once, and cap the
+  // number of counted matches so a heavily-tagged track can't swamp a perfect single-tag one.
+  let genreMatches = 0
   for (const genre of track.genres) {
     const g = genre.toLowerCase()
     for (const kw of genreKeywords) {
       if (g.includes(kw)) {
-        s += 3
-        break // count each genre string at most once
+        genreMatches++
+        break
       }
     }
   }
+  s += Math.min(genreMatches, MAX_GENRE_MATCHES) * GENRE_MATCH_SCORE
 
   // Era match
   if (eraRanges.length > 0 && track.year > 0) {
     for (const [start, end] of eraRanges) {
       if (track.year >= start && track.year <= end) {
-        s += 2
+        s += ERA_SCORE
         break
       }
     }
@@ -134,14 +158,14 @@ function scoreTrack(
   for (const token of vibeTokens) {
     if (token.length < 3) continue
     for (const artist of artistsLower) {
-      if (artist.includes(token)) s += 5
+      if (artist.includes(token)) s += ARTIST_NAME_SCORE
     }
   }
 
   // Vibe token found in track name
   const nameLower = track.name.toLowerCase()
   for (const token of vibeTokens) {
-    if (token.length > 2 && nameLower.includes(token)) s += 1
+    if (token.length > 2 && nameLower.includes(token)) s += NAME_MATCH_SCORE
   }
 
   return s
@@ -166,19 +190,43 @@ export function preFilter(library: Track[], vibe: string): CandidateTrack[] {
     if (pattern.test(vibe)) eraRanges.push(range)
   }
 
-  const scored = library.map((track) => ({
-    track,
-    score: scoreTrack(track, vibeTokens, genreKeywords, eraRanges),
-  }))
+  const scored = library.map((track) => {
+    const signal = scoreTrack(track, vibeTokens, genreKeywords, eraRanges)
+    // Blend a soft popularity nudge (≤ +1) and per-vibe variety jitter (≤ VARIETY_WEIGHT)
+    // into the score. Both are smaller than one genre match, so real signal always wins;
+    // they only reorder tracks the signal ranks equally (esp. the zero-score long tail).
+    const popularity = (track.popularity || 0) / 100 * POPULARITY_WEIGHT
+    const variety = hashUnit(`${vibe}|${track.id}`) * VARIETY_WEIGHT
+    return { track, score: signal + popularity + variety }
+  })
 
-  // Sort by score desc, popularity as tiebreaker (so zero-score tracks are ranked by popularity)
-  scored.sort((a, b) => b.score - a.score || b.track.popularity - a.track.popularity)
+  scored.sort((a, b) => b.score - a.score)
 
-  return scored.slice(0, MAX_CANDIDATES).map(({ track }) => ({
-    id: track.id,
-    name: track.name,
-    artists: track.artists,
-    genres: track.genres,
-    year: track.year,
-  }))
+  // #4: cap tracks per primary artist so a few prolific artists can't dominate the set.
+  // Overflow (tracks past the cap) backfills only if the capped pass comes up short
+  // (small or artist-heavy libraries), so we still return a full candidate set.
+  const perArtist = new Map<string, number>()
+  const picked: Track[] = []
+  const overflow: Track[] = []
+  for (const { track } of scored) {
+    const key = track.artists[0]?.toLowerCase() ?? ''
+    const count = perArtist.get(key) ?? 0
+    if (count < MAX_PER_ARTIST) {
+      perArtist.set(key, count + 1)
+      picked.push(track)
+    } else {
+      overflow.push(track)
+    }
+  }
+
+  return picked
+    .concat(overflow)
+    .slice(0, MAX_CANDIDATES)
+    .map((track) => ({
+      id: track.id,
+      name: track.name,
+      artists: track.artists,
+      genres: track.genres,
+      year: track.year,
+    }))
 }
