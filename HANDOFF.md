@@ -3,9 +3,10 @@
 The PRD is the static spec. This file tracks live build progress. Update it as you go.
 
 ## Status
-**Phase:** Steps 1–7 complete + a perf/UX pass. Full flow verified end-to-end (2026-06-30): vibe →
-curated playlist → real playlist saved to Spotify with all tracks. **Deployed to prod** (latest commit
-live on https://playlist-generator-theta-one.vercel.app via `npx vercel --prod --yes`).
+**Phase:** Steps 1–7 complete + perf/UX + a branding/visual overhaul (2026-06-30). Full flow verified
+end-to-end: vibe → curated playlist → real playlist saved to Spotify with all tracks. **Deployed to
+prod** (latest commit live on https://playlist-generator-theta-one.vercel.app via `npx vercel --prod
+--yes`). Latest commit: `d6c3f20`.
 
 ## Live URL
 https://playlist-generator-theta-one.vercel.app
@@ -79,7 +80,41 @@ https://playlist-generator-theta-one.vercel.app
 - **design.md** created at repo root — the visual system (color/type/spacing/shape tokens, motion
   rules incl. GSAP conventions, component patterns). Read it before adding UI.
 
+## Session 2026-06-30 (branding + visual overhaul)
+All committed (`d6c3f20` and prior) and deployed. Order of work:
+- **Brand assets** (`public/`): robot `favicon.svg` (replaced the leftover purple scaffold logo),
+  `og-image.png` (1200×630 social card). `index.html` got a real `<title>`, description, and full
+  Open Graph + Twitter meta. OG banner is **social-share only** (user's call) — not shown in-app;
+  verified live (`200 image/png`, tags served). Deleted unused `src/assets/hero.png`.
+- **Animated robot mascots** — `src/components/RobotMascot.tsx` exports `RobotHero` (login + Get
+  Started landing) and `RobotTyping` (fades into the vibe search bar on focus/typing/curating).
+  IMPORTANT: robots are **inline SVG JSX with animation in `index.css`**, NOT `.svg` files. The
+  user's editor has an on-save SVG optimizer that strips `<style>`/animation attrs from `.svg` files;
+  inline JSX + app CSS is immune. Keyframes: `robot-eq` (equalizer bars), `robot-note` (antenna+note
+  bob straight up/down as one unit — no rotation, no gap). Don't reintroduce animated `.svg` files.
+- **Get Started landing flow** — after login + library load, `GetStartedHero` shows (robot + title +
+  track count + CTA). Click swipes hero up/out via GSAP, then `LibraryStats` slides up in. Post-login
+  only (OAuth redirect would interrupt a pre-login swipe). `started` state in `LibraryScreen`.
+- **Album art** — added `albumArt` to `Track` (comes FREE in the `/me/tracks` payload — smallest of
+  `album.images`; NO extra API call, curation still uses name+artist+genre+year only). Rendered via
+  `AlbumArt` sub-component (lazy, opacity+scale reveal, equalizer-glyph fallback) in curated cards +
+  library rows. **Cache key bumped `pg_library` → `pg_library_v2`** so art-less caches re-fetch once.
+- **Genre tags + count** — on the review screen only. Reuses the Last.fm genres already fetched per
+  candidate in `useCurate` (previously discarded); now kept in `genresByTrack: Map<id,string[]>` and
+  shown as up-to-3 pills per card + "spanning N genres" in the summary. **Zero extra requests.** User
+  explicitly declined full-library genre enrichment (would be ~617 Last.fm calls / throttling risk).
+- **Two-column layout** — `LibraryStats` and `CurateResult` are now `lg:grid-cols-[19rem_1fr]`:
+  sticky controls/summary left, **bounded scroll pane right** (`max-h-[70vh]` / `calc(100vh-…)` with
+  `.custom-scrollbar`). Fixes endless page scroll. Collapses to single column below `lg`.
+- **Motion → Impeccable spec** (friend's ref: github.com/pbakaus/impeccable). Easing `ease-out-quart`
+  `cubic-bezier(0.165,0.84,0.44,1)` (const `EASE_QUART` in LibraryScreen; GSAP `expo.out`), entrances
+  200–300ms, subtle Y, **transform+opacity only**, `prefers-reduced-motion` guards everywhere. See
+  design.md. Other friend refs: codrops (animation inspo), higgsfield (AI video/image gen — for a
+  promo later, not UI).
+
 ## Next step (open ideas, none started)
+- **2×2 album-art cover mosaic** on the review screen + **animated save-success** (checkmark draw +
+  confetti-lite) — user selected album-art/cards this session but skipped these two; easy next win.
 - **Library-ready screen entrance** (stats/title fade-up) — same GSAP pattern as the results stagger.
 - **Album-art thumbnails** in track rows (lazy-loaded, fixed size) — biggest list upgrade.
 - **Empty/error states** with more character than plain text.

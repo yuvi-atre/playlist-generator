@@ -44,6 +44,15 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
 - **Hover:** interactive rows use `hover:bg-zinc-900`; text links
   `hover:text-white` / `hover:text-zinc-300` with `transition-colors`.
 
+## Motion — follows the Impeccable spec (github.com/pbakaus/impeccable)
+- **Easing:** `ease-out-quart` = `cubic-bezier(0.165, 0.84, 0.44, 1)` (GSAP equivalent `expo.out`).
+  Const `EASE_QUART` in `LibraryScreen.tsx` for the Tailwind arbitrary value. NO bounce/elastic/linear
+  (linear only for the indeterminate progress bar).
+- **Durations:** entrances/exits 200–300ms; hover/micro ≤200ms. Success ~260ms.
+- **Only animate `transform` + `opacity`.** Never width/height/top/left. Hover lift = `-translate-y`.
+- **`prefers-reduced-motion` is non-negotiable** — every entrance guards on it (`prefersReducedMotion()`
+  helper for GSAP; `motion-reduce:` utilities for CSS transitions).
+
 ## Motion (GSAP + CSS)
 - **Library:** GSAP (`gsap` + `@gsap/react`) is available. Use the `useGSAP()`
   hook (auto-cleanup); scope animations to a ref, don't animate globally.
@@ -63,11 +72,19 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
 - **Text input:** `rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3
   text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500`.
 - **List row:** flex, `justify-between`, `px-3 py-2 rounded-lg hover:bg-zinc-900`.
-- **Result card:** bordered (`border border-zinc-800 rounded-lg px-4 py-3`),
-  stacked track name / artist·year / italic reason.
+- **Result card:** `group` row — index number, `AlbumArt`, then track name / artist·year / genre
+  pills / italic reason (left-border quote). Hover: `-translate-y-0.5` + border/bg lift, `EASE_QUART`.
+- **Album art (`AlbumArt`):** thumbnail from `track.albumArt` (free in `/me/tracks`; NO extra call).
+  Lazy-loaded, reveals opacity 0→1 + scale 0.97→1, equalizer-glyph fallback. 44px cards / 36px rows.
+- **Genre pills:** `rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400`, max 3 per card.
+  Review screen only (reuses Last.fm genres fetched during curation — see HANDOFF).
+- **Robot mascots:** inline SVG components (`RobotMascot.tsx`), animated via `index.css` keyframes —
+  NOT `.svg` files (editor optimizer strips them). `RobotHero` (login/landing), `RobotTyping` (search).
+- **Two-column workspace:** `lg:grid-cols-[19rem_1fr]` — sticky controls left, bounded scroll pane
+  right (`.custom-scrollbar`, `max-h-[70vh]` / `calc(100vh-…)`). Single column below `lg`.
 
 ## Not yet defined (decide before building)
 - Public/private playlist toggle styling (v2 — needs `playlist-modify-public`).
-- Album-art thumbnails in rows (would add images; lazy-load + fixed size).
+- 2×2 album-art cover mosaic + animated save-success (checkmark/confetti) on the review screen.
 - Empty / error illustration states beyond plain text.
 - A display typeface, if the app ever wants more personality than system-ui.
