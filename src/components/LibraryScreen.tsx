@@ -24,7 +24,10 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
     <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-        <span className="font-semibold text-white text-sm">🎵 Playlist Generator</span>
+        <span className="flex items-center gap-2 font-semibold text-white text-sm">
+          <img src="/favicon.svg" alt="" aria-hidden="true" className="w-5 h-5" />
+          Playlist Generator
+        </span>
         <div className="flex items-center gap-4">
           {user && <span className="text-zinc-400 text-sm">{user.displayName}</span>}
           <button
