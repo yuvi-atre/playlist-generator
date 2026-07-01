@@ -18,7 +18,6 @@ interface Props {
 
 export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props) {
   const { tracks, fetchedAt, loading, progress, error } = library
-  const curate = useCurate(tracks)
   // Show the hero landing first; the prompt view is revealed on "Get Started".
   const [started, setStarted] = useState(false)
 
@@ -44,6 +43,20 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
     () => new Set([...libGenres.values()].flat()).size,
     [libGenres]
   )
+
+  // Merge background-enriched genres onto tracks so the pre-filter's genre signal actually
+  // fires (Spotify leaves track.genres empty). Uses whatever's cached/loaded at curate time;
+  // useCurate's post-filter pass backfills any candidate genres still missing on a cold start.
+  const enrichedTracks = useMemo(
+    () =>
+      libGenres.size === 0
+        ? tracks
+        : tracks.map((t) =>
+            t.genres.length ? t : { ...t, genres: libGenres.get(t.artists[0]) ?? [] }
+          ),
+    [tracks, libGenres]
+  )
+  const curate = useCurate(enrichedTracks)
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -75,7 +88,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
         ) : curate.result ? (
           <CurateResult
             results={curate.result}
-            tracks={tracks}
+            tracks={enrichedTracks}
             vibe={curate.vibe ?? ''}
             genresByTrack={curate.genresByTrack}
             getAccessToken={getAccessToken}
@@ -85,7 +98,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
           <GetStartedHero trackCount={tracks.length} onStart={() => setStarted(true)} />
         ) : (
           <LibraryStats
-            tracks={tracks}
+            tracks={enrichedTracks}
             trackCount={tracks.length}
             artistCount={uniqueArtists}
             genreCount={uniqueGenres}
