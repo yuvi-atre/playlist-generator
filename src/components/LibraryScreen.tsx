@@ -252,7 +252,7 @@ function CurateResult({
   getAccessToken: () => Promise<string>
   onReset: () => void
 }) {
-  const trackMap = new Map(tracks.map((t) => [t.id, t]))
+  const trackMap = useMemo(() => new Map(tracks.map((t) => [t.id, t])), [tracks])
   const [playlistName, setPlaylistName] = useState(vibe || 'My Vibe Playlist')
   const [saving, setSaving] = useState(false)
   const [savedUrl, setSavedUrl] = useState<string | null>(null)

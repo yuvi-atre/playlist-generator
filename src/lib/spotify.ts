@@ -80,18 +80,41 @@ export async function fetchAllLikedSongs(
   accessToken: string,
   onProgress?: (fetched: number) => void
 ): Promise<SpotifySavedTrackItem[]> {
-  const all: SpotifySavedTrackItem[] = []
-  let url: string | null = `${API_BASE}/me/tracks?limit=50`
+  const LIMIT = 50
+  const PAGE_CONCURRENCY = 5
+  type Page = { items: SpotifySavedTrackItem[]; next: string | null; total: number }
 
-  type Page = { items: SpotifySavedTrackItem[]; next: string | null }
-  while (url) {
-    const page: Page = await apiGetUrl<Page>(url, accessToken)
-    all.push(...page.items)
-    onProgress?.(all.length)
-    url = page.next
+  // First page tells us the total, so the rest can be fetched in parallel by
+  // offset instead of chaining `next` one request at a time.
+  const first = await apiGetUrl<Page>(`${API_BASE}/me/tracks?limit=${LIMIT}&offset=0`, accessToken)
+  const results: SpotifySavedTrackItem[] = [...first.items]
+  let fetched = first.items.length
+  onProgress?.(fetched)
+  if (fetched >= first.total) return results
+
+  const offsets: number[] = []
+  for (let o = LIMIT; o < first.total; o += LIMIT) offsets.push(o)
+
+  const pages: SpotifySavedTrackItem[][] = new Array(offsets.length)
+  let cursor = 0
+  async function worker() {
+    while (cursor < offsets.length) {
+      const i = cursor++
+      const page = await apiGetUrl<Page>(
+        `${API_BASE}/me/tracks?limit=${LIMIT}&offset=${offsets[i]}`,
+        accessToken
+      )
+      pages[i] = page.items
+      fetched += page.items.length
+      onProgress?.(fetched)
+    }
   }
+  await Promise.all(
+    Array.from({ length: Math.min(PAGE_CONCURRENCY, offsets.length) }, worker)
+  )
 
-  return all
+  for (const p of pages) results.push(...p) // offset order preserved
+  return results
 }
 
 // Spotify /artists accepts up to 50 IDs per request
