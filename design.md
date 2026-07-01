@@ -80,8 +80,12 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
   Review screen only (reuses Last.fm genres fetched during curation — see HANDOFF).
 - **Robot mascots:** inline SVG components (`RobotMascot.tsx`), animated via `index.css` keyframes —
   NOT `.svg` files (editor optimizer strips them). `RobotHero` (login/landing), `RobotTyping` (search).
-- **Two-column workspace:** `lg:grid-cols-[19rem_1fr]` — sticky controls left, bounded scroll pane
-  right (`.custom-scrollbar`, `max-h-[70vh]` / `calc(100vh-…)`). Single column below `lg`.
+- **Two-column workspace:** `lg:grid-cols-[24rem_1fr]` (`max-w-6xl`) — sticky controls left (title,
+  stats, enlarged `py-4 text-base` vibe prompt, `BrandBanner`), bounded scroll pane right
+  (`.custom-scrollbar`, `max-h-[70vh]` / `calc(100vh-…)`). Single column below `lg`.
+- **BrandBanner:** branded card (robot + wordmark + live `robot-eq` equalizer, green radial glow)
+  anchoring the left column. The "genres" stat is real but fills in async — background Last.fm
+  enrichment of the full library runs after render (non-blocking, cached).
 
 ## Not yet defined (decide before building)
 - Public/private playlist toggle styling (v2 — needs `playlist-modify-public`).

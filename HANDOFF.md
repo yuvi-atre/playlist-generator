@@ -112,7 +112,22 @@ All committed (`d6c3f20` and prior) and deployed. Order of work:
   design.md. Other friend refs: codrops (animation inspo), higgsfield (AI video/image gen — for a
   promo later, not UI).
 
+## Session 2026-07-01 — BrandBanner + upscale + real genre count
+All committed (`ce47460`) and deployed.
+- **BrandBanner** (Claude-design component in `LibraryScreen.tsx`): robot + "Playlist Generator"
+  wordmark + live equalizer (HTML divs using the `robot-eq` class). Anchors the bottom of the library
+  workspace's left column.
+- **Upscaled the library-ready area:** left column `19rem → 24rem` (`max-w-6xl`, `gap-10`), vibe input
+  + Generate button enlarged to `py-4 text-base`.
+- **Genre count is now real on the library screen.** `LibraryScreen` runs a BACKGROUND full-library
+  Last.fm enrich (`fetchArtistGenres` over all unique first-artists) in a `useEffect` after render —
+  non-blocking, cached; `uniqueGenres` derives from that map so the "genres" stat fills in a few
+  seconds after load. User had declined this for perf; backgrounding it resolved the concern. First
+  load ≈ 617 Last.fm calls (concurrency 15, failures cache as []); lower `CONCURRENCY` in `lastfm.ts`
+  if throttled.
+
 ## Next step (open ideas, none started)
+- **Search/pre-filter tuning** (`src/lib/preFilter.ts`) — candidate selection quality (in discussion).
 - **2×2 album-art cover mosaic** on the review screen + **animated save-success** (checkmark draw +
   confetti-lite) — user selected album-art/cards this session but skipped these two; easy next win.
 - **Library-ready screen entrance** (stats/title fade-up) — same GSAP pattern as the results stagger.
