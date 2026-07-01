@@ -338,8 +338,6 @@ function GetStartedHero({ trackCount, onStart }: { trackCount: number; onStart: 
   )
 }
 
-const PAGE_SIZE = 50
-
 function LibraryStats({
   tracks,
   trackCount,
@@ -371,7 +369,6 @@ function LibraryStats({
   const [vibeFocused, setVibeFocused] = useState(false)
   const [filters, setFilters] = useState<CurateFilters>(DEFAULT_FILTERS)
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(0)
   const showBot = vibeFocused || vibe.trim().length > 0 || curating
   const cachedDate = fetchedAt ? new Date(fetchedAt).toLocaleString() : null
 
@@ -392,9 +389,6 @@ function LibraryStats({
       (t) => t.name.toLowerCase().includes(q) || t.artists.some((a) => a.toLowerCase().includes(q))
     )
   }, [tracks, search])
-
-  const paginated = filtered.slice(0, (page + 1) * PAGE_SIZE)
-  const hasMore = paginated.length < filtered.length
 
   // Sync the right column's height to the left column's actual rendered height
   // (lg+ only, where they sit side by side) — so opening/closing Filters grows
@@ -506,10 +500,7 @@ function LibraryStats({
         <input
           type="text"
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setPage(0)
-          }}
+          onChange={(e) => setSearch(e.target.value)}
           placeholder="Search songs or artists…"
           className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
         />
@@ -524,7 +515,7 @@ function LibraryStats({
           className="custom-scrollbar flex flex-col gap-1 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-11rem)]"
           style={syncedHeight ? { maxHeight: syncedHeight } : undefined}
         >
-          {paginated.map((t) => (
+          {filtered.map((t) => (
             <li
               key={t.id}
               className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors"
@@ -537,15 +528,6 @@ function LibraryStats({
               <span className="text-zinc-600 text-xs shrink-0">{t.year || '—'}</span>
             </li>
           ))}
-
-          {hasMore && (
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors self-center mt-2"
-            >
-              Show more
-            </button>
-          )}
         </ul>
       </div>
     </div>
