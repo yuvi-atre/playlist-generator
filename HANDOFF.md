@@ -3,8 +3,9 @@
 The PRD is the static spec. This file tracks live build progress. Update it as you go.
 
 ## Status
-**Phase:** Steps 1–7 complete. Full flow verified end-to-end locally (2026-06-30): vibe → curated
-playlist → real playlist saved to Spotify with all tracks. Ready to redeploy.
+**Phase:** Steps 1–7 complete + a perf/UX pass. Full flow verified end-to-end (2026-06-30): vibe →
+curated playlist → real playlist saved to Spotify with all tracks. **Deployed to prod** (latest commit
+live on https://playlist-generator-theta-one.vercel.app via `npx vercel --prod --yes`).
 
 ## Live URL
 https://playlist-generator-theta-one.vercel.app
@@ -64,10 +65,31 @@ https://playlist-generator-theta-one.vercel.app
   - Also required: add the login account's **email** under Spotify dashboard → User Management.
 - Error bodies now logged on failed Spotify GET/POST (`apiGetUrl`/`apiPost`).
 
-## Next step
-- Redeploy to Vercel (frontend changes + `api/curate.ts`). Confirm `VITE_LASTFM_API_KEY` is set in
-  Vercel env alongside the existing vars.
-- Optional polish still open from Step 7: 429 backoff messaging on Spotify fetch, empty-curate copy.
+## Session 2026-06-30 (cont.) — perf + UX + polish
+- **Perf:** `fetchAllLikedSongs` now fetches pages in parallel (concurrency 5) by offset using the
+  first page's `total`, instead of chaining `next` serially (~17 serial reqs → ~4 rounds for ~800
+  tracks; order preserved, 429 backoff intact). Last.fm enrichment concurrency 5 → 15. `trackMap`
+  in `CurateResult` memoized. Bundle confirmed lean (~68 KB gzip before GSAP).
+- **Loading UX:** `useCurate` exposes a `phase` ('matching' | 'enriching' | 'curating'); indeterminate
+  progress bar (`LoadingBar` + `indeterminate-slide` keyframe in `index.css`) shown during curation
+  and save, with step captions. NOTE: LLM curation is inherently ~3–6s — this is perceived-perf, not a
+  real speedup. A true % bar is meaningless for an LLM call, so the bar is indeterminate on purpose.
+- **Animation:** added **GSAP** (`gsap` + `@gsap/react`, ~28 KB gzip → bundle ~97 KB). Curated result
+  cards stagger in via `useGSAP` (scoped, auto-cleanup, guarded by `prefers-reduced-motion`).
+- **design.md** created at repo root — the visual system (color/type/spacing/shape tokens, motion
+  rules incl. GSAP conventions, component patterns). Read it before adding UI.
+
+## Next step (open ideas, none started)
+- **Library-ready screen entrance** (stats/title fade-up) — same GSAP pattern as the results stagger.
+- **Album-art thumbnails** in track rows (lazy-loaded, fixed size) — biggest list upgrade.
+- **Empty/error states** with more character than plain text.
+- **Public access:** app is in Spotify Development Mode (max 5 allowlisted users). To let anyone use it,
+  request **Extended Quota Mode** in the Spotify dashboard (needs a privacy policy page, app branding).
+- Optional Step-7 polish: 429 backoff messaging on Spotify fetch, friendlier empty-curate copy.
+- Optional: promo video via Higgsfield (asset generator, not UI code) for sharing the project.
+
+## Open questions
+- "impeccable" — a friend's recommendation we couldn't identify (studio? template? font?). Need a link.
 
 ## Decisions log
 - Two-stage curation (code pre-filter → Claude pass). [PRD §8]
@@ -102,7 +124,13 @@ https://playlist-generator-theta-one.vercel.app
 - Open http://localhost:5173
 - Spotify redirect URI for local dev: `http://127.0.0.1:5173/callback` (must be in Spotify dashboard)
 
-## Vercel env vars (production)
+## Vercel env vars (production) — all set (verified via `vercel env ls production`)
 - `VITE_SPOTIFY_CLIENT_ID` — set
 - `VITE_SPOTIFY_REDIRECT_URI` — set to https://playlist-generator-theta-one.vercel.app/callback
 - `ANTHROPIC_API_KEY` — set (rotate in Anthropic Console if exposed)
+- `VITE_LASTFM_API_KEY` — set (Preview + Production)
+
+## Redeploy
+- `npx vercel --prod --yes` from the repo (CLI authed as `yuvi-atre`, project linked via `.vercel/`).
+- `git push origin main` also updates the GitHub remote. A transient "Not authorized" on deploy just
+  needs a retry.
