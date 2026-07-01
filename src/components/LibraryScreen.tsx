@@ -5,9 +5,18 @@ import { useCurate, type CuratePhase } from '../hooks/useCurate'
 import { RobotHero, RobotTyping } from './RobotMascot'
 import { LASTFM_API_KEY } from '../lib/config'
 import { fetchArtistGenres } from '../lib/lastfm'
+import { canonicalizeGenres } from '../lib/genres'
 import type { LibraryState } from '../hooks/useLibrary'
 import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
-import type { AppError, CuratedTrack, SpotifyUser, Track } from '../lib/types'
+import { DEFAULT_FILTERS } from '../lib/types'
+import type {
+  AppError,
+  CurateFilters,
+  CuratedTrack,
+  PlaylistLength,
+  SpotifyUser,
+  Track,
+} from '../lib/types'
 
 interface Props {
   user: SpotifyUser | null
@@ -39,9 +48,29 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
       cancelled = true
     }
   }, [tracks])
+  // Canonicalize tags first (collapses hiphop/hip-hop/hip hop, drops non-genre tags
+  // like decades/nationalities) so the count and chips reflect real, deduped genres.
   const uniqueGenres = useMemo(
-    () => new Set([...libGenres.values()].flat()).size,
+    () => new Set([...libGenres.values()].flatMap(canonicalizeGenres)).size,
     [libGenres]
+  )
+
+  // Filter options derived from the library: top genres by frequency (for chips) and
+  // the artist list (for the include/exclude pickers' autocomplete). Both memoized.
+  const genreOptions = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const genres of libGenres.values()) {
+      for (const g of canonicalizeGenres(genres)) counts.set(g, (counts.get(g) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 30)
+      .map(([g]) => g)
+  }, [libGenres])
+
+  const artistOptions = useMemo(
+    () => [...new Set(tracks.flatMap((t) => t.artists))].sort((a, b) => a.localeCompare(b)),
+    [tracks]
   )
 
   // Merge background-enriched genres onto tracks so the pre-filter's genre signal actually
@@ -107,7 +136,9 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             curating={curate.loading}
             curatePhase={curate.phase}
             curateError={curate.error}
-            onCurate={(vibe) => void curate.curate(vibe)}
+            genreOptions={genreOptions}
+            artistOptions={artistOptions}
+            onCurate={(vibe, filters) => void curate.curate(vibe, filters)}
           />
         )}
       </main>
@@ -121,8 +152,19 @@ function LoadingState({ progress }: { progress: number | null }) {
   return (
     <div className="flex flex-col items-center gap-4 text-zinc-400">
       <svg className="w-8 h-8 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        <circle
+          className="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+        <path
+          className="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+        />
       </svg>
       <p className="text-sm">
         {progress !== null && progress > 0
@@ -211,7 +253,9 @@ function BrandBanner() {
     <div className="relative flex items-center gap-4 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
       <div
         className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(circle at 18% 50%, rgba(34,197,94,0.18), transparent 65%)' }}
+        style={{
+          background: 'radial-gradient(circle at 18% 50%, rgba(34,197,94,0.18), transparent 65%)',
+        }}
       />
       <RobotHero className="relative w-16 h-auto shrink-0" />
       <div className="relative flex flex-col gap-1.5">
@@ -295,6 +339,8 @@ function LibraryStats({
   curating,
   curatePhase,
   curateError,
+  genreOptions,
+  artistOptions,
   onCurate,
 }: {
   tracks: Track[]
@@ -306,10 +352,13 @@ function LibraryStats({
   curating: boolean
   curatePhase: CuratePhase | null
   curateError: AppError | null
-  onCurate: (vibe: string) => void
+  genreOptions: string[]
+  artistOptions: string[]
+  onCurate: (vibe: string, filters: CurateFilters) => void
 }) {
   const [vibe, setVibe] = useState('')
   const [vibeFocused, setVibeFocused] = useState(false)
+  const [filters, setFilters] = useState<CurateFilters>(DEFAULT_FILTERS)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const showBot = vibeFocused || vibe.trim().length > 0 || curating
@@ -329,9 +378,7 @@ function LibraryStats({
     const q = search.trim().toLowerCase()
     if (!q) return tracks
     return tracks.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.artists.some((a) => a.toLowerCase().includes(q))
+      (t) => t.name.toLowerCase().includes(q) || t.artists.some((a) => a.toLowerCase().includes(q))
     )
   }, [tracks, search])
 
@@ -341,11 +388,14 @@ function LibraryStats({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = vibe.trim()
-    if (trimmed) onCurate(trimmed)
+    if (trimmed) onCurate(trimmed, filters)
   }
 
   return (
-    <div ref={rootRef} className="w-full max-w-6xl grid gap-10 lg:grid-cols-[24rem_1fr] items-start">
+    <div
+      ref={rootRef}
+      className="w-full max-w-6xl grid gap-10 lg:grid-cols-[24rem_1fr] items-start"
+    >
       {/* LEFT: library info + vibe prompt (sticky on desktop) */}
       <div className="flex flex-col gap-6 lg:sticky lg:top-6">
         <div className="flex flex-col gap-4 text-center lg:text-left">
@@ -388,6 +438,13 @@ function LibraryStats({
               }`}
             />
           </div>
+          <FiltersPanel
+            filters={filters}
+            onChange={setFilters}
+            genreOptions={genreOptions}
+            artistOptions={artistOptions}
+            disabled={curating}
+          />
           <button
             type="submit"
             disabled={curating || !vibe.trim()}
@@ -397,11 +454,11 @@ function LibraryStats({
           </button>
         </form>
 
-        {curating && (
-          <LoadingBar label={curatePhase ? PHASE_LABELS[curatePhase] : 'Working…'} />
-        )}
+        {curating && <LoadingBar label={curatePhase ? PHASE_LABELS[curatePhase] : 'Working…'} />}
 
-        {curateError && <p className="text-red-400 text-sm text-center lg:text-left">{curateError.message}</p>}
+        {curateError && (
+          <p className="text-red-400 text-sm text-center lg:text-left">{curateError.message}</p>
+        )}
 
         <BrandBanner />
       </div>
@@ -411,18 +468,26 @@ function LibraryStats({
         <input
           type="text"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0) }}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(0)
+          }}
           placeholder="Search songs or artists…"
           className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
         />
 
         {search && (
-          <p className="text-zinc-500 text-xs">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>
+          <p className="text-zinc-500 text-xs">
+            {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+          </p>
         )}
 
         <ul className="custom-scrollbar flex flex-col gap-1 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-11rem)]">
           {paginated.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors">
+            <li
+              key={t.id}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors"
+            >
               <AlbumArt url={t.albumArt} size={36} />
               <div className="min-w-0 flex-1">
                 <span className="text-white text-sm truncate block">{t.name}</span>
@@ -441,6 +506,329 @@ function LibraryStats({
             </button>
           )}
         </ul>
+      </div>
+    </div>
+  )
+}
+
+// ── Filters panel ──────────────────────────────────────────────────────────────
+
+const LENGTH_OPTIONS: Array<{ value: PlaylistLength; label: string; hint: string }> = [
+  { value: 'short', label: 'Short', hint: '~15' },
+  { value: 'medium', label: 'Medium', hint: '~25' },
+  { value: 'long', label: 'Long', hint: '~45' },
+]
+
+const DECADE_OPTIONS: Array<{ start: number; label: string }> = [
+  { start: 1960, label: '60s' },
+  { start: 1970, label: '70s' },
+  { start: 1980, label: '80s' },
+  { start: 1990, label: '90s' },
+  { start: 2000, label: '00s' },
+  { start: 2010, label: '10s' },
+  { start: 2020, label: '20s' },
+]
+
+function toggle<T>(list: T[], item: T): T[] {
+  return list.includes(item) ? list.filter((x) => x !== item) : [...list, item]
+}
+
+function FiltersPanel({
+  filters,
+  onChange,
+  genreOptions,
+  artistOptions,
+  disabled,
+}: {
+  filters: CurateFilters
+  onChange: (f: CurateFilters) => void
+  genreOptions: string[]
+  artistOptions: string[]
+  disabled: boolean
+}) {
+  const [open, setOpen] = useState(false)
+
+  const gateCount =
+    filters.includeGenres.length +
+    filters.excludeGenres.length +
+    filters.includeArtists.length +
+    filters.excludeArtists.length +
+    filters.decades.length
+
+  // Genre chips cycle neutral → include → exclude → neutral.
+  const cycleGenre = (g: string) => {
+    if (filters.includeGenres.includes(g)) {
+      onChange({
+        ...filters,
+        includeGenres: filters.includeGenres.filter((x) => x !== g),
+        excludeGenres: [...filters.excludeGenres, g],
+      })
+    } else if (filters.excludeGenres.includes(g)) {
+      onChange({ ...filters, excludeGenres: filters.excludeGenres.filter((x) => x !== g) })
+    } else {
+      onChange({ ...filters, includeGenres: [...filters.includeGenres, g] })
+    }
+  }
+
+  const clearAll = () => onChange({ ...DEFAULT_FILTERS, length: filters.length })
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-3 text-sm text-zinc-300 hover:text-white transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          Filters
+          {gateCount > 0 && (
+            <span className="rounded-full bg-green-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              {gateCount}
+            </span>
+          )}
+        </span>
+        <span className={`text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+
+      {open && (
+        <div className="custom-scrollbar flex max-h-[55vh] flex-col gap-5 overflow-y-auto border-t border-zinc-800 px-4 py-4">
+          {/* Length */}
+          <div className="flex flex-col gap-2">
+            <FilterLabel>Playlist length</FilterLabel>
+            <div className="flex gap-1.5">
+              {LENGTH_OPTIONS.map((opt) => {
+                const active = filters.length === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onChange({ ...filters, length: opt.value })}
+                    className={`flex-1 rounded-lg border px-2 py-2 text-xs transition-colors ${
+                      active
+                        ? 'border-green-500 bg-green-500/10 text-green-300'
+                        : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                    }`}
+                  >
+                    {opt.label}
+                    <span className="ml-1 text-zinc-600">{opt.hint}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Decades */}
+          <div className="flex flex-col gap-2">
+            <FilterLabel>Decades</FilterLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {DECADE_OPTIONS.map((d) => {
+                const active = filters.decades.includes(d.start)
+                return (
+                  <button
+                    key={d.start}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      onChange({ ...filters, decades: toggle(filters.decades, d.start) })
+                    }
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                      active
+                        ? 'border-green-500 bg-green-500/10 text-green-300'
+                        : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Genres */}
+          <div className="flex flex-col gap-2">
+            <FilterLabel>
+              Genres
+              <span className="ml-2 font-normal normal-case text-zinc-500">
+                tap <span className="text-green-400">＋include</span>, again{' '}
+                <span className="text-red-400">－exclude</span>
+              </span>
+            </FilterLabel>
+            {genreOptions.length === 0 ? (
+              <p className="text-xs text-zinc-600">Loading genres from your library…</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {genreOptions.map((g) => {
+                  const inc = filters.includeGenres.includes(g)
+                  const exc = filters.excludeGenres.includes(g)
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => cycleGenre(g)}
+                      className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        inc
+                          ? 'border-green-500 bg-green-500/10 text-green-300'
+                          : exc
+                            ? 'border-red-500 bg-red-500/10 text-red-300'
+                            : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {inc && <span className="mr-0.5 font-semibold">＋</span>}
+                      {exc && <span className="mr-0.5 font-semibold">－</span>}
+                      <span className={exc ? 'line-through' : ''}>{g}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Artists */}
+          <ArtistPicker
+            label="Only these artists"
+            accent="green"
+            options={artistOptions}
+            selected={filters.includeArtists}
+            disabled={disabled}
+            onAdd={(name) =>
+              onChange({
+                ...filters,
+                includeArtists: [...new Set([...filters.includeArtists, name])],
+              })
+            }
+            onRemove={(name) =>
+              onChange({
+                ...filters,
+                includeArtists: filters.includeArtists.filter((x) => x !== name),
+              })
+            }
+          />
+          <ArtistPicker
+            label="Never these artists"
+            accent="red"
+            options={artistOptions}
+            selected={filters.excludeArtists}
+            disabled={disabled}
+            onAdd={(name) =>
+              onChange({
+                ...filters,
+                excludeArtists: [...new Set([...filters.excludeArtists, name])],
+              })
+            }
+            onRemove={(name) =>
+              onChange({
+                ...filters,
+                excludeArtists: filters.excludeArtists.filter((x) => x !== name),
+              })
+            }
+          />
+
+          {gateCount > 0 && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="self-start text-xs text-zinc-500 underline transition-colors hover:text-zinc-300"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FilterLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">{children}</span>
+  )
+}
+
+function ArtistPicker({
+  label,
+  accent,
+  options,
+  selected,
+  disabled,
+  onAdd,
+  onRemove,
+}: {
+  label: string
+  accent: 'green' | 'red'
+  options: string[]
+  selected: string[]
+  disabled: boolean
+  onAdd: (name: string) => void
+  onRemove: (name: string) => void
+}) {
+  const [query, setQuery] = useState('')
+
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return options.filter((a) => a.toLowerCase().includes(q) && !selected.includes(a)).slice(0, 6)
+  }, [query, options, selected])
+
+  const chipClass =
+    accent === 'green'
+      ? 'border-green-500 bg-green-500/10 text-green-300'
+      : 'border-red-500 bg-red-500/10 text-red-300'
+
+  return (
+    <div className="flex flex-col gap-2">
+      <FilterLabel>{label}</FilterLabel>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((name) => (
+            <span
+              key={name}
+              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${chipClass}`}
+            >
+              {name}
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onRemove(name)}
+                aria-label={`Remove ${name}`}
+                className="opacity-70 hover:opacity-100"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          disabled={disabled}
+          placeholder="Type an artist…"
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-50"
+        />
+        {suggestions.length > 0 && (
+          <ul className="custom-scrollbar absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-lg">
+            {suggestions.map((name) => (
+              <li key={name}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAdd(name)
+                    setQuery('')
+                  }}
+                  className="block w-full truncate px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+                >
+                  {name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
@@ -474,12 +862,18 @@ function CurateResult({
     () => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
       if (!listRef.current) return
-      gsap.from(listRef.current.children, {
+      // Only stagger the first dozen (roughly the visible ones). Animating every
+      // card set them all to opacity:0 up front, so a long list read as a dark
+      // fade where lower cards never became legible. clearProps strips the inline
+      // styles on finish so nothing can stay stuck transparent.
+      const cards = Array.from(listRef.current.children).slice(0, 12)
+      gsap.from(cards, {
         opacity: 0,
         y: 8,
         duration: 0.3,
         ease: 'expo.out',
         stagger: 0.03,
+        clearProps: 'opacity,transform',
       })
     },
     { scope: listRef, dependencies: [results] }
@@ -495,7 +889,11 @@ function CurateResult({
     try {
       const token = await getAccessToken()
       const playlistId = await createPlaylist(token, playlistName, false)
-      await addTracksToPlaylist(token, playlistId, results.map((r) => r.id))
+      await addTracksToPlaylist(
+        token,
+        playlistId,
+        results.map((r) => r.id)
+      )
       setSavedUrl(`https://open.spotify.com/playlist/${playlistId}`)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save playlist')
@@ -566,7 +964,11 @@ function CurateResult({
                 onClick={() => void handleShare()}
                 className="px-5 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-500 text-white text-sm font-medium transition-colors"
               >
-                {shareStatus === 'copied' ? 'Link copied!' : shareStatus === 'shared' ? 'Shared!' : 'Share'}
+                {shareStatus === 'copied'
+                  ? 'Link copied!'
+                  : shareStatus === 'shared'
+                    ? 'Shared!'
+                    : 'Share'}
               </button>
             </div>
           </div>
@@ -595,13 +997,16 @@ function CurateResult({
       </div>
 
       {/* RIGHT: curated cards — bounded scroll pane */}
-      <ul ref={listRef} className="custom-scrollbar w-full flex flex-col gap-2 min-w-0 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-9rem)]">
+      <ul
+        ref={listRef}
+        className="custom-scrollbar w-full flex flex-col gap-2 min-w-0 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-9rem)]"
+      >
         {results.map(({ id, reason }, i) => {
           const track = trackMap.get(id)
           return (
             <li
               key={id}
-              className={`group flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3 transition duration-200 ${EASE_QUART} hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900 motion-reduce:transition-none motion-reduce:hover:translate-y-0`}
+              className={`group flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 transition duration-200 ${EASE_QUART} hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-800 motion-reduce:transition-none motion-reduce:hover:translate-y-0`}
             >
               <span className="w-5 shrink-0 pt-0.5 text-right text-xs tabular-nums text-zinc-600">
                 {i + 1}

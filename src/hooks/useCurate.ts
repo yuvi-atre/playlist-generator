@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { LASTFM_API_KEY } from '../lib/config'
 import { fetchArtistGenres } from '../lib/lastfm'
 import { preFilter } from '../lib/preFilter'
-import type { AppError, CurateResponse, CuratedTrack, Track } from '../lib/types'
+import type { AppError, CurateFilters, CurateResponse, CuratedTrack, Track } from '../lib/types'
 
 export type CuratePhase = 'matching' | 'enriching' | 'curating'
 
@@ -14,8 +14,20 @@ export interface CurateState {
   vibe: string | null
   // Last.fm genres per curated track id — captured during curation, reused for display.
   genresByTrack: Map<string, string[]>
-  curate: (vibe: string) => Promise<void>
+  curate: (vibe: string, filters?: CurateFilters) => Promise<void>
   reset: () => void
+}
+
+// True when the user has set any hard gate — used to tailor the empty-pool message.
+function hasActiveGates(f?: CurateFilters): boolean {
+  if (!f) return false
+  return (
+    f.includeGenres.length > 0 ||
+    f.excludeGenres.length > 0 ||
+    f.includeArtists.length > 0 ||
+    f.excludeArtists.length > 0 ||
+    f.decades.length > 0
+  )
 }
 
 export function useCurate(library: Track[]): CurateState {
@@ -27,7 +39,7 @@ export function useCurate(library: Track[]): CurateState {
   const [genresByTrack, setGenresByTrack] = useState<Map<string, string[]>>(new Map())
 
   const curate = useCallback(
-    async (vibe: string) => {
+    async (vibe: string, filters?: CurateFilters) => {
       setLoading(true)
       setPhase('matching')
       setError(null)
@@ -35,12 +47,14 @@ export function useCurate(library: Track[]): CurateState {
       setVibe(vibe)
 
       try {
-        const candidates = preFilter(library, vibe)
+        const candidates = preFilter(library, vibe, filters)
 
         if (candidates.length === 0) {
           setError({
             code: 'empty_results',
-            message: 'Your library is empty — add some liked songs on Spotify first.',
+            message: hasActiveGates(filters)
+              ? 'No songs match those filters — try loosening them.'
+              : 'Your library is empty — add some liked songs on Spotify first.',
           })
           return
         }
@@ -48,7 +62,9 @@ export function useCurate(library: Track[]): CurateState {
         // Enrich candidates with Last.fm genres (non-fatal if it fails)
         setPhase('enriching')
         const uniqueArtists = [...new Set(candidates.map((c) => c.artists[0]).filter(Boolean))]
-        const genreMap = await fetchArtistGenres(uniqueArtists, LASTFM_API_KEY).catch(() => new Map<string, string[]>())
+        const genreMap = await fetchArtistGenres(uniqueArtists, LASTFM_API_KEY).catch(
+          () => new Map<string, string[]>()
+        )
         const enrichedCandidates = candidates.map((c) => ({
           ...c,
           genres: c.genres.length > 0 ? c.genres : (genreMap.get(c.artists[0]) ?? []),
@@ -60,7 +76,7 @@ export function useCurate(library: Track[]): CurateState {
         const res = await fetch('/api/curate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vibe, candidates: enrichedCandidates }),
+          body: JSON.stringify({ vibe, candidates: enrichedCandidates, length: filters?.length }),
         })
 
         if (res.status === 429) {
@@ -82,14 +98,17 @@ export function useCurate(library: Track[]): CurateState {
         if (!Array.isArray(data.tracks) || data.tracks.length === 0) {
           setError({
             code: 'empty_results',
-            message: "No tracks matched your vibe — try a different prompt.",
+            message: 'No tracks matched your vibe — try a different prompt.',
           })
           return
         }
 
         setResult(data.tracks)
       } catch {
-        setError({ code: 'unknown', message: 'Network error — check your connection and try again.' })
+        setError({
+          code: 'unknown',
+          message: 'Network error — check your connection and try again.',
+        })
       } finally {
         setLoading(false)
         setPhase(null)

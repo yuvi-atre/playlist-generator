@@ -51,10 +51,34 @@ export interface SpotifyArtist {
 
 // ── Claude curation API shapes ────────────────────────────────────────────────
 
+// Playlist length target — maps to a candidate count range in api/curate.ts.
+export type PlaylistLength = 'short' | 'medium' | 'long'
+
+// User-set filters applied as HARD gates in preFilter before scoring (except
+// `length`, which is forwarded to the LLM). Empty arrays / null mean "no filter".
+export interface CurateFilters {
+  includeGenres: string[] // if non-empty, candidate must match ≥1 (substring, case-insensitive)
+  excludeGenres: string[] // candidate matching any is dropped
+  includeArtists: string[] // if non-empty, restrict to these artists; also cap-exempt + boosted
+  excludeArtists: string[] // tracks by these artists are dropped
+  decades: number[] // decade start years (e.g. 1990); if non-empty, track year must fall in one
+  length: PlaylistLength
+}
+
+export const DEFAULT_FILTERS: CurateFilters = {
+  includeGenres: [],
+  excludeGenres: [],
+  includeArtists: [],
+  excludeArtists: [],
+  decades: [],
+  length: 'medium',
+}
+
 // What we POST to /api/curate
 export interface CurateRequest {
   vibe: string
   candidates: CandidateTrack[]
+  length?: PlaylistLength
 }
 
 // Lean candidate payload sent to the LLM (no full Track to keep token count down)

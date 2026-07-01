@@ -1,6 +1,8 @@
-import type { CandidateTrack, Track } from './types'
+import { canonicalizeGenre } from './genres'
+import type { CandidateTrack, CurateFilters, Track } from './types'
 
 const MAX_CANDIDATES = 150
+const INCLUDE_ARTIST_BOOST = 8 // #1 adaptive cap: rank an explicitly-included artist's tracks high
 
 // ── Scoring knobs (tune these) ────────────────────────────────────────────────
 const GENRE_MATCH_SCORE = 3 // per matching genre string…
@@ -108,10 +110,50 @@ const ERA_PATTERNS: Array<{ pattern: RegExp; range: [number, number] }> = [
 ]
 
 const STOP_WORDS = new Set([
-  'a', 'an', 'the', 'and', 'or', 'but', 'for', 'of', 'to', 'in', 'on', 'at', 'by',
-  'is', 'it', 'me', 'my', 'we', 'our', 'us', 'be', 'do', 'up', 'so', 'if',
-  'with', 'like', 'some', 'that', 'this', 'was', 'are', 'has', 'had', 'boys',
-  'girls', 'good', 'just', 'really', 'very', 'vibe', 'vibes', 'music', 'songs',
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'but',
+  'for',
+  'of',
+  'to',
+  'in',
+  'on',
+  'at',
+  'by',
+  'is',
+  'it',
+  'me',
+  'my',
+  'we',
+  'our',
+  'us',
+  'be',
+  'do',
+  'up',
+  'so',
+  'if',
+  'with',
+  'like',
+  'some',
+  'that',
+  'this',
+  'was',
+  'are',
+  'has',
+  'had',
+  'boys',
+  'girls',
+  'good',
+  'just',
+  'really',
+  'very',
+  'vibe',
+  'vibes',
+  'music',
+  'songs',
 ])
 
 function tokenize(text: string): string[] {
@@ -171,8 +213,62 @@ function scoreTrack(
   return s
 }
 
-export function preFilter(library: Track[], vibe: string): CandidateTrack[] {
+// Substring match of a track's genres against any filter term. Track tags are
+// canonicalized first so a canonical chip term ("hip hop") matches raw Last.fm
+// variants ("hiphop"/"hip-hop") on the track. Terms arrive already canonical/lowercased.
+function genresMatchAny(track: Track, terms: string[]): boolean {
+  if (terms.length === 0) return false
+  const genres = track.genres.map((g) => canonicalizeGenre(g) ?? g.toLowerCase())
+  return terms.some((term) => genres.some((g) => g.includes(term)))
+}
+
+// Case-insensitive substring match of any of a track's artists against any filter term.
+function artistsMatchAny(track: Track, terms: string[]): boolean {
+  if (terms.length === 0) return false
+  const artists = track.artists.map((a) => a.toLowerCase())
+  return terms.some((term) => artists.some((a) => a.includes(term)))
+}
+
+// HARD gate: a track must survive every active filter dimension (AND across
+// dimensions; OR within one). Empty dimensions are skipped. Returns false to drop.
+function passesFilters(track: Track, f: CurateFilters): boolean {
+  if (f.excludeGenres.length && genresMatchAny(track, f.excludeGenres)) return false
+  if (f.includeGenres.length && !genresMatchAny(track, f.includeGenres)) return false
+  if (f.excludeArtists.length && artistsMatchAny(track, f.excludeArtists)) return false
+  if (f.includeArtists.length && !artistsMatchAny(track, f.includeArtists)) return false
+  if (f.decades.length) {
+    if (track.year <= 0) return false
+    const decade = Math.floor(track.year / 10) * 10
+    if (!f.decades.includes(decade)) return false
+  }
+  return true
+}
+
+// Lowercase + trim a filter dimension's terms; drop blanks so a stray "" can't match everything.
+function normalizeTerms(terms: string[]): string[] {
+  return terms.map((t) => t.trim().toLowerCase()).filter(Boolean)
+}
+
+export function preFilter(
+  library: Track[],
+  vibe: string,
+  filters?: CurateFilters
+): CandidateTrack[] {
   if (library.length === 0) return []
+
+  // Normalize filter terms up front so gating and cap-exemption compare like-for-like.
+  const f: CurateFilters | null = filters
+    ? {
+        ...filters,
+        includeGenres: normalizeTerms(filters.includeGenres),
+        excludeGenres: normalizeTerms(filters.excludeGenres),
+        includeArtists: normalizeTerms(filters.includeArtists),
+        excludeArtists: normalizeTerms(filters.excludeArtists),
+      }
+    : null
+
+  const pool = f ? library.filter((t) => passesFilters(t, f)) : library
+  if (pool.length === 0) return []
 
   const vibeTokens = tokenize(vibe)
 
@@ -190,14 +286,18 @@ export function preFilter(library: Track[], vibe: string): CandidateTrack[] {
     if (pattern.test(vibe)) eraRanges.push(range)
   }
 
-  const scored = library.map((track) => {
+  const includeArtists = f?.includeArtists ?? []
+
+  const scored = pool.map((track) => {
     const signal = scoreTrack(track, vibeTokens, genreKeywords, eraRanges)
     // Blend a soft popularity nudge (≤ +1) and per-vibe variety jitter (≤ VARIETY_WEIGHT)
     // into the score. Both are smaller than one genre match, so real signal always wins;
     // they only reorder tracks the signal ranks equally (esp. the zero-score long tail).
-    const popularity = (track.popularity || 0) / 100 * POPULARITY_WEIGHT
+    const popularity = ((track.popularity || 0) / 100) * POPULARITY_WEIGHT
     const variety = hashUnit(`${vibe}|${track.id}`) * VARIETY_WEIGHT
-    return { track, score: signal + popularity + variety }
+    // #1 adaptive cap: explicitly-included artists are the point of the playlist — boost them.
+    const boost = artistsMatchAny(track, includeArtists) ? INCLUDE_ARTIST_BOOST : 0
+    return { track, score: signal + popularity + variety + boost }
   })
 
   scored.sort((a, b) => b.score - a.score)
@@ -209,6 +309,12 @@ export function preFilter(library: Track[], vibe: string): CandidateTrack[] {
   const picked: Track[] = []
   const overflow: Track[] = []
   for (const { track } of scored) {
+    // #1 adaptive cap: when the user explicitly includes an artist, go deep on them —
+    // exempt their tracks from the per-artist diversity cap.
+    if (includeArtists.length && artistsMatchAny(track, includeArtists)) {
+      picked.push(track)
+      continue
+    }
     const key = track.artists[0]?.toLowerCase() ?? ''
     const count = perArtist.get(key) ?? 0
     if (count < MAX_PER_ARTIST) {

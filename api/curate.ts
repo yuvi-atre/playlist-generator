@@ -1,10 +1,20 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import type { CurateRequest, CurateResponse } from '../src/lib/types.js'
+import type { CurateRequest, CurateResponse, PlaylistLength } from '../src/lib/types.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const SYSTEM_PROMPT = `You are a music curator. Given a vibe prompt and a list of candidate tracks from a user's liked-songs library, select the best 20–25 tracks that authentically fit the vibe.
+// Target track-count band per requested length. `min` is a soft floor — the model
+// is told to return fewer if fewer genuinely fit rather than padding with weak picks.
+const LENGTH_TARGETS: Record<PlaylistLength, { min: number; aim: number; max: number }> = {
+  short: { min: 10, aim: 15, max: 18 },
+  medium: { min: 20, aim: 25, max: 30 },
+  long: { min: 35, aim: 45, max: 50 },
+}
+
+function buildSystemPrompt(length: PlaylistLength): string {
+  const { min, aim, max } = LENGTH_TARGETS[length]
+  return `You are a music curator. Given a vibe prompt and a list of candidate tracks from a user's liked-songs library, select the tracks that authentically fit the vibe.
 
 Return STRICT JSON only — no prose, no markdown fences, no text outside the JSON object.
 
@@ -16,10 +26,11 @@ Schema:
 }
 
 Rules:
-- Pick 20–25 tracks. Never fewer than 15, never more than 30.
+- Aim for about ${aim} tracks (${min}–${max}). Quality over quantity: if fewer than ${aim} candidates genuinely fit the vibe, return fewer — DO NOT pad with weak picks. Never exceed ${max}.
 - Only use IDs from the provided candidate list.
 - Order tracks for good listening flow.
 - Reasons must be specific to the vibe, not generic.`
+}
 
 // Structured-outputs schema — forces the model to return JSON matching this exact
 // shape, so no prose, no markdown fences, and no truncated/garbled output slips through.
@@ -70,13 +81,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { vibe, candidates } = body
+  const length: PlaylistLength =
+    body.length === 'short' || body.length === 'long' ? body.length : 'medium'
 
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-5',
       max_tokens: 8192,
       thinking: { type: 'disabled' },
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(length),
       messages: [
         {
           role: 'user',
