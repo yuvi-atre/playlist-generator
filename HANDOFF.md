@@ -137,8 +137,16 @@ All committed (`ce47460`) and deployed.
   free/local)**; #5 candidate count. Full detail in the `project_roadmap` memory.
 
 ## Next step (open ideas, none started)
-- **Search filtering #3 + #4** (`src/lib/preFilter.ts`) — cap genre score, better tiebreak, per-artist
-  diversity cap. In progress.
+- **Search filtering #3 + #4** — DONE (`preFilter.ts`, knobs are named constants). Live `111fdbd`.
+- **v2 curation features (validated 2026-07-01, not started; full detail in `project_roadmap` memory):**
+  1. **Artist-focused playlists.** ⚠️ Conflicts with the `MAX_PER_ARTIST=3` diversity cap — reconcile
+     via an ADAPTIVE cap: when the vibe names a library artist (preFilter already +5s it), exempt that
+     artist from the cap and boost. DECIDE THIS FIRST before building 1 or 3.
+  2. **Playlist length range (no forced padding).** Prompt change in `api/curate.ts` — pass a target
+     range to Claude, instruct "return fewer if fewer genuinely fit; do not pad." Quality > quantity.
+  3. **Include/exclude genres + artists.** Do it in `preFilter` (free/local). This is CLAUDE.md's
+     deferred-to-v2 genre filter — now unblocked by the `libGenres` background enrichment. Overlaps #1.
+  - Also still queued: **#2 vibe→genre coverage** (dictionary or Haiku expansion for off-dictionary vibes).
 - **2×2 album-art cover mosaic** on the review screen + **animated save-success** (checkmark draw +
   confetti-lite) — user selected album-art/cards this session but skipped these two; easy next win.
 - **Library-ready screen entrance** (stats/title fade-up) — same GSAP pattern as the results stagger.
