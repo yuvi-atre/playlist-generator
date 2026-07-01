@@ -912,14 +912,17 @@ function CurateResult({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied'>('idle')
 
-  // Fade + rise the save-state block in whenever it swaps (name input/Save
-  // button -> the success card) so clicking Save doesn't cut over instantly.
+  // Swipe the save-state block up-and-in whenever it swaps (name input/Save
+  // button -> the success card): a slower, more visible rise so the swap reads
+  // as a deliberate swipe rather than an instant cut. The matching "swipe up
+  // and away" exit for the OLD content plays imperatively in handleSave below,
+  // before this entrance's dependency (savedUrl) even changes.
   const saveStateRef = useRef<HTMLDivElement>(null)
   useGSAP(
     () => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
       if (!saveStateRef.current) return
-      gsap.from(saveStateRef.current, { opacity: 0, y: 8, duration: 0.35, ease: 'expo.out' })
+      gsap.from(saveStateRef.current, { opacity: 0, y: 28, duration: 0.6, ease: 'expo.out' })
     },
     { scope: saveStateRef, dependencies: [savedUrl] }
   )
@@ -935,7 +938,23 @@ function CurateResult({
         playlistId,
         results.map((r) => r.id)
       )
-      setSavedUrl(`https://open.spotify.com/playlist/${playlistId}`)
+      const url = `https://open.spotify.com/playlist/${playlistId}`
+
+      // Swipe the pre-save block up and away before swapping in the success
+      // card, so the transition reads as a real two-part motion (out, then in).
+      if (saveStateRef.current && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        await new Promise<void>((resolve) => {
+          gsap.to(saveStateRef.current, {
+            opacity: 0,
+            y: -28,
+            duration: 0.35,
+            ease: 'power2.in',
+            onComplete: resolve,
+          })
+        })
+      }
+
+      setSavedUrl(url)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save playlist')
     } finally {
