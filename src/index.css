@@ -18,3 +18,28 @@ body {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(320%); }
 }
+
+/* Robot mascot animation — equalizer bars bounce, antenna stretches, note bobs.
+   Driven from here (not inside the .svg files) so an SVG optimizer can't strip it.
+   Used by RobotHero (login) and RobotTyping (vibe search bar). */
+@keyframes robot-eq {
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
+}
+/* Antenna + note move together as one unit — straight up and down, no rotation —
+   so no gap ever opens between the note and the green antenna. */
+@keyframes robot-note {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.robot-eq {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: robot-eq 1.1s ease-in-out infinite;
+}
+.robot-note {
+  animation: robot-note 1.7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .robot-eq, .robot-note { animation: none; }
+}

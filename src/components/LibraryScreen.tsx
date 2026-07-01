@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCurate, type CuratePhase } from '../hooks/useCurate'
+import { RobotTyping } from './RobotMascot'
 import type { LibraryState } from '../hooks/useLibrary'
 import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
 import type { AppError, CuratedTrack, SpotifyUser, Track } from '../lib/types'
@@ -146,8 +147,10 @@ function LibraryStats({
   onCurate: (vibe: string) => void
 }) {
   const [vibe, setVibe] = useState('')
+  const [vibeFocused, setVibeFocused] = useState(false)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
+  const showBot = vibeFocused || vibe.trim().length > 0 || curating
   const cachedDate = fetchedAt ? new Date(fetchedAt).toLocaleString() : null
 
   const filtered = useMemo(() => {
@@ -189,14 +192,25 @@ function LibraryStats({
       </button>
 
       <form onSubmit={handleSubmit} className="w-full flex gap-2 mt-2">
-        <input
-          type="text"
-          value={vibe}
-          onChange={(e) => setVibe(e.target.value)}
-          placeholder="Describe a vibe… (e.g. Minecraft with the boys)"
-          disabled={curating}
-          className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
-        />
+        <div className="relative flex-1">
+          <RobotTyping
+            className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-7 h-7 transition-opacity duration-200 ${
+              showBot ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+          <input
+            type="text"
+            value={vibe}
+            onChange={(e) => setVibe(e.target.value)}
+            onFocus={() => setVibeFocused(true)}
+            onBlur={() => setVibeFocused(false)}
+            placeholder="Describe a vibe… (e.g. Minecraft with the boys)"
+            disabled={curating}
+            className={`w-full rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50 transition-all ${
+              showBot ? 'pl-11 pr-4' : 'px-4'
+            }`}
+          />
+        </div>
         <button
           type="submit"
           disabled={curating || !vibe.trim()}

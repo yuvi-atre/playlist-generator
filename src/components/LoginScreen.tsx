@@ -1,3 +1,4 @@
+import { RobotHero } from './RobotMascot'
 import type { AppError } from '../lib/types'
 
 interface Props {
@@ -10,7 +11,7 @@ export function LoginScreen({ onLogin, loading, error }: Props) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-8 px-4">
       <div className="flex flex-col items-center gap-3 text-center">
-        <img src="/robot.svg" alt="" aria-hidden="true" className="w-24 h-auto" />
+        <RobotHero className="w-28 h-auto" />
         <h1 className="text-3xl font-semibold tracking-tight text-white">Playlist Generator</h1>
         <p className="text-zinc-400 max-w-sm text-sm leading-relaxed">
           Describe a vibe — get a curated playlist pulled straight from your liked songs.
