@@ -301,6 +301,22 @@ export function preFilter(
 
   const includeArtists = f?.includeArtists ?? []
 
+  // Vibe-mentioned artists: an artist named directly in the free-text vibe (e.g.
+  // "give me all Drake") gets the same depth treatment as the explicit
+  // Include-Artist filter, without needing the filter UI. Same substring rule as
+  // the ARTIST_NAME_SCORE signal below (token length ≥ 3, case-insensitive).
+  const vibeMentionedArtists = new Set<string>()
+  for (const track of pool) {
+    for (const artist of track.artists) {
+      const a = artist.toLowerCase()
+      if (vibeMentionedArtists.has(a)) continue
+      if (vibeTokens.some((token) => token.length >= 3 && a.includes(token))) {
+        vibeMentionedArtists.add(a)
+      }
+    }
+  }
+  const boostArtists = [...new Set([...includeArtists, ...vibeMentionedArtists])]
+
   const scored = pool.map((track) => {
     const signal = scoreTrack(track, vibeTokens, genreKeywords, eraRanges)
     // Blend a soft popularity nudge (≤ +1) and per-vibe variety jitter (≤ VARIETY_WEIGHT)
@@ -308,8 +324,9 @@ export function preFilter(
     // they only reorder tracks the signal ranks equally (esp. the zero-score long tail).
     const popularity = ((track.popularity || 0) / 100) * POPULARITY_WEIGHT
     const variety = hashUnit(`${vibe}|${track.id}`) * VARIETY_WEIGHT
-    // #1 adaptive cap: explicitly-included artists are the point of the playlist — boost them.
-    const boost = artistsMatchAny(track, includeArtists) ? INCLUDE_ARTIST_BOOST : 0
+    // #1 adaptive cap: artists explicitly included OR named in the vibe are the
+    // point of the playlist — boost them.
+    const boost = artistsMatchAny(track, boostArtists) ? INCLUDE_ARTIST_BOOST : 0
     return { track, score: signal + popularity + variety + boost }
   })
 
@@ -322,9 +339,9 @@ export function preFilter(
   const picked: Track[] = []
   const overflow: Track[] = []
   for (const { track } of scored) {
-    // #1 adaptive cap: when the user explicitly includes an artist, go deep on them —
-    // exempt their tracks from the per-artist diversity cap.
-    if (includeArtists.length && artistsMatchAny(track, includeArtists)) {
+    // #1 adaptive cap: when an artist is explicitly included OR named in the
+    // vibe, go deep on them — exempt their tracks from the per-artist diversity cap.
+    if (boostArtists.length && artistsMatchAny(track, boostArtists)) {
       picked.push(track)
       continue
     }
