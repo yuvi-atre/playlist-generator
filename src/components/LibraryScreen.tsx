@@ -922,7 +922,17 @@ function CurateResult({
     () => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
       if (!saveStateRef.current) return
-      gsap.from(saveStateRef.current, { opacity: 0, y: 28, duration: 0.6, ease: 'expo.out' })
+      // The exit tween in handleSave leaves opacity/transform as inline styles
+      // on this node; clear them first so .from() reads the true resting state
+      // instead of animating from invisible to invisible.
+      gsap.set(saveStateRef.current, { clearProps: 'opacity,transform' })
+      gsap.from(saveStateRef.current, {
+        opacity: 0,
+        y: 28,
+        duration: 0.6,
+        ease: 'expo.out',
+        clearProps: 'opacity,transform',
+      })
     },
     { scope: saveStateRef, dependencies: [savedUrl] }
   )
