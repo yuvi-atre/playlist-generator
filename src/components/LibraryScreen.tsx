@@ -612,9 +612,35 @@ function LoadingBar({ label }: { label?: string }) {
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
+  const numRef = useRef<HTMLSpanElement>(null)
+
+  // Count up from 0 to the real value. Reduced-motion shows the final number instantly.
+  useGSAP(
+    () => {
+      const el = numRef.current
+      if (!el) return
+      if (prefersReducedMotion() || value === 0) {
+        el.textContent = value.toLocaleString()
+        return
+      }
+      const counter = { v: 0 }
+      gsap.to(counter, {
+        v: value,
+        duration: 1.1,
+        ease: 'power2.out',
+        onUpdate: () => {
+          el.textContent = Math.round(counter.v).toLocaleString()
+        },
+      })
+    },
+    { dependencies: [value] }
+  )
+
   return (
     <div className="flex flex-col items-center gap-1">
-      <span className="text-3xl font-bold text-white">{value.toLocaleString()}</span>
+      <span ref={numRef} className="text-3xl font-bold text-white tabular-nums">
+        {value.toLocaleString()}
+      </span>
       <span className="text-zinc-500 text-xs uppercase tracking-wider">{label}</span>
     </div>
   )
