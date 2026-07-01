@@ -48,25 +48,36 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
       cancelled = true
     }
   }, [tracks])
-  // Canonicalize tags first (collapses hiphop/hip-hop/hip hop, drops non-genre tags
-  // like decades/nationalities) so the count and chips reflect real, deduped genres.
-  const uniqueGenres = useMemo(
-    () => new Set([...libGenres.values()].flatMap(canonicalizeGenres)).size,
-    [libGenres]
-  )
+  // How many artists a genre must tag to count as "real" — drops the long tail of
+  // one-off tags (stray artist names, memes, typos) that Last.fm leaves behind.
+  const MIN_GENRE_ARTISTS = 2
 
-  // Filter options derived from the library: top genres by frequency (for chips) and
-  // the artist list (for the include/exclude pickers' autocomplete). Both memoized.
-  const genreOptions = useMemo(() => {
+  // Canonicalize tags (collapses variants, drops non-genre tags) and count how many
+  // artists carry each genre — shared by the stat and the filter chips.
+  const genreCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const genres of libGenres.values()) {
       for (const g of canonicalizeGenres(genres)) counts.set(g, (counts.get(g) ?? 0) + 1)
     }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 30)
-      .map(([g]) => g)
+    return counts
   }, [libGenres])
+
+  // Stat: only genres that characterize the library (>= MIN_GENRE_ARTISTS artists).
+  const uniqueGenres = useMemo(
+    () => [...genreCounts.values()].filter((n) => n >= MIN_GENRE_ARTISTS).length,
+    [genreCounts]
+  )
+
+  // Chips: same threshold, top 30 by frequency. (Artist autocomplete uses the raw list.)
+  const genreOptions = useMemo(
+    () =>
+      [...genreCounts.entries()]
+        .filter(([, n]) => n >= MIN_GENRE_ARTISTS)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 30)
+        .map(([g]) => g),
+    [genreCounts]
+  )
 
   const artistOptions = useMemo(
     () => [...new Set(tracks.flatMap((t) => t.artists))].sort((a, b) => a.localeCompare(b)),
