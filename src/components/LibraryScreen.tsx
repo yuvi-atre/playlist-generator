@@ -1028,7 +1028,10 @@ function CurateResult({
 
         {saveError && <p className="text-red-400 text-sm text-center lg:text-left">{saveError}</p>}
 
-        <CuratedVisualizer />
+        {/* Pre-save "vibing" mascot. Once saved, PlaylistSuccess (above, inside
+            the savedUrl branch) takes over the mascot role -- showing both
+            read as two redundant cards stacked on top of each other. */}
+        {!savedUrl && <CuratedVisualizer />}
       </div>
 
       {/* RIGHT: curated cards — bounded scroll pane */}
