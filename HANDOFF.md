@@ -126,8 +126,19 @@ All committed (`ce47460`) and deployed.
   load ≈ 617 Last.fm calls (concurrency 15, failures cache as []); lower `CONCURRENCY` in `lastfm.ts`
   if throttled.
 
+## Session 2026-07-01 (cont.) — share button + search roadmap
+- **Share button** on the saved screen (`CurateResult`): Web Share API (native sheet on mobile →
+  iMessage/AirDrop) with a clipboard-copy fallback on desktop. Spotify links already unfurl rich
+  previews, so the link is the share.
+- **Cost profile confirmed:** ~2–3¢/playlist on Sonnet 5 (intro $2/$10). Keep the Console spend cap.
+  Rejected a native iMessage app ($99/yr + review, overkill). See the `project_roadmap` memory.
+- **Search-optimization roadmap** logged (`preFilter.ts`): #1 genre-aware filter DONE; #2 vibe→genre
+  coverage (dictionary or Haiku expansion); **#3 scoring balance + #4 artist diversity (chosen next,
+  free/local)**; #5 candidate count. Full detail in the `project_roadmap` memory.
+
 ## Next step (open ideas, none started)
-- **Search/pre-filter tuning** (`src/lib/preFilter.ts`) — candidate selection quality (in discussion).
+- **Search filtering #3 + #4** (`src/lib/preFilter.ts`) — cap genre score, better tiebreak, per-artist
+  diversity cap. In progress.
 - **2×2 album-art cover mosaic** on the review screen + **animated save-success** (checkmark draw +
   confetti-lite) — user selected album-art/cards this session but skipped these two; easy next win.
 - **Library-ready screen entrance** (stats/title fade-up) — same GSAP pattern as the results stagger.

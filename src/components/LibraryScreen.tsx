@@ -487,6 +487,7 @@ function CurateResult({
   const [saving, setSaving] = useState(false)
   const [savedUrl, setSavedUrl] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied'>('idle')
 
   async function handleSave() {
     setSaving(true)
@@ -501,6 +502,32 @@ function CurateResult({
     } finally {
       setSaving(false)
     }
+  }
+
+  // Native share sheet on mobile (iMessage, AirDrop, …); clipboard fallback on desktop.
+  async function handleShare() {
+    if (!savedUrl) return
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: playlistName || 'Playlist',
+          text: `Check out "${playlistName}" — a playlist I curated`,
+          url: savedUrl,
+        })
+        setShareStatus('shared')
+      } catch {
+        return // user dismissed the share sheet — leave the label unchanged
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(savedUrl)
+        setShareStatus('copied')
+      } catch {
+        setSaveError('Could not copy the link — use "Open in Spotify" and copy from there.')
+        return
+      }
+    }
+    setTimeout(() => setShareStatus('idle'), 2000)
   }
 
   return (
@@ -526,14 +553,22 @@ function CurateResult({
         {savedUrl ? (
           <div className="flex flex-col items-center lg:items-start gap-3">
             <p className="text-green-400 text-sm font-medium">Playlist saved to Spotify!</p>
-            <a
-              href={savedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
-            >
-              Open in Spotify
-            </a>
+            <div className="flex gap-2">
+              <a
+                href={savedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
+              >
+                Open in Spotify
+              </a>
+              <button
+                onClick={() => void handleShare()}
+                className="px-5 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-500 text-white text-sm font-medium transition-colors"
+              >
+                {shareStatus === 'copied' ? 'Link copied!' : shareStatus === 'shared' ? 'Shared!' : 'Share'}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
