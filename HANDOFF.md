@@ -9,8 +9,9 @@ normalization, Haiku vibe-expansion) + **intelligence-layer v2** (two-pass candi
 fix, canonical genre scoring, expansion v2 with moods/energy/avoidGenres, curation prompt v2 with
 playlistName/curatorNote, review-screen track removal). Full flow verified end-to-end: vibe → curated
 playlist → real playlist saved to Spotify. **Deployed to prod** (live on
-https://playlist-generator-theta-one.vercel.app via `npx vercel --prod --yes`). Latest commit: see
-`git log` — intelligence-layer v2 session, 2026-07-01.
+https://playlist-generator-theta-one.vercel.app via `npx vercel --prod --yes`). Latest commit: `9ba47d4`
+(intelligence-layer v2, 2026-07-01) — pushed to GitHub, deployed, and BOTH prod endpoints runtime-verified
+(`/api/expand-vibe` and `/api/curate` v2 responses confirmed live).
 
 ## Live URL
 
