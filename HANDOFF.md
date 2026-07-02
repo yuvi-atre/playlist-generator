@@ -243,6 +243,18 @@ moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_
   own.** The name input now prefills with the RAW vibe; Claude's title shows as an opt-in
   "Suggestion: …— tap to use" chip below it (hidden once applied/matching), and the curator note got
   an explicit "Curator's note" label. Committed + deployed.
+- **Playlist covers (user report: iMessage preview showed a blank Safari icon):** fresh API playlists
+  have NO cover, so link unfurls were blank. Now `handleSave` generates a cover client-side
+  (`src/lib/cover.ts`: 2×2 album-art mosaic from the kept tracks; 1–3 images → full-bleed; none →
+  branded zinc-gradient + green equalizer + title fallback; canvas → base64 JPEG stepped under the
+  256 KB cap) and uploads it via `uploadPlaylistCover` (`PUT /playlists/{id}/images`, raw base64 body,
+  Content-Type image/jpeg). Verified: `i.scdn.co` serves `access-control-allow-origin: *`, so
+  `crossOrigin='anonymous'` keeps the canvas untainted. **Supporting changes:** `Track.albumArtLarge`
+  (~300px, second-smallest image — the 64px thumbs were too blurry for a 640px cover) → **library
+  cache key bumped `pg_library_v2` → `pg_library_v3`** (one-time auto refetch); **scope added:
+  `ugc-image-upload`** — pre-existing tokens lack it, so the upload is NON-FATAL (401/403 → subtle
+  "log out and back in to enable covers" notice via `coverNotice`; other failures silent). ⚠️ Users
+  must re-login ONCE to grant the scope before covers upload.
 - ⚠️ **Worktree note:** this session ran in a git worktree without `.env` — local API testing used
   `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
   `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.

@@ -13,7 +13,8 @@ import { LASTFM_API_KEY } from '../lib/config'
 import { fetchArtistGenres } from '../lib/lastfm'
 import { canonicalizeGenres } from '../lib/genres'
 import type { LibraryState } from '../hooks/useLibrary'
-import { addTracksToPlaylist, createPlaylist } from '../lib/spotify'
+import { addTracksToPlaylist, createPlaylist, uploadPlaylistCover } from '../lib/spotify'
+import { generatePlaylistCover } from '../lib/cover'
 import { DEFAULT_FILTERS } from '../lib/types'
 import type {
   AppError,
@@ -930,6 +931,8 @@ function CurateResult({
   const [saving, setSaving] = useState(false)
   const [savedUrl, setSavedUrl] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Informational only (e.g. cover upload skipped for a stale-scope token).
+  const [coverNotice, setCoverNotice] = useState<string | null>(null)
   const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied'>('idle')
 
   // Swipe the save-state block up-and-in whenever it swaps (name input/Save
@@ -969,6 +972,24 @@ function CurateResult({
         kept.map((r) => r.id)
       )
       const url = `https://open.spotify.com/playlist/${playlistId}`
+
+      // Give the playlist a real cover (2×2 album-art mosaic, branded fallback)
+      // so iMessage/Discord link previews aren't blank. Non-fatal by design:
+      // tokens from before the ugc-image-upload scope will 401/403 here.
+      try {
+        const artUrls = kept.map((r) => {
+          const t = trackMap.get(r.id)
+          return t?.albumArtLarge ?? t?.albumArt
+        })
+        const cover = await generatePlaylistCover(artUrls, playlistName)
+        if (cover) await uploadPlaylistCover(token, playlistId, cover)
+      } catch (err) {
+        const status = (err as { status?: number }).status
+        if (status === 401 || status === 403) {
+          setCoverNotice('Saved without a cover image — log out and back in to enable covers.')
+        }
+        // any other cover failure is silent; the playlist itself saved fine
+      }
 
       // Swipe the pre-save block up and away before swapping in the success
       // card, so the transition reads as a real two-part motion (out, then in).
@@ -1115,6 +1136,10 @@ function CurateResult({
         {saving && <LoadingBar label="Creating your playlist on Spotify…" />}
 
         {saveError && <p className="text-red-400 text-sm text-center lg:text-left">{saveError}</p>}
+
+        {coverNotice && (
+          <p className="text-zinc-500 text-xs text-center lg:text-left">{coverNotice}</p>
+        )}
 
         {/* Pre-save "vibing" mascot. Once saved, PlaylistSuccess (above, inside
             the savedUrl branch) takes over the mascot role -- showing both

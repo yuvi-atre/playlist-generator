@@ -3,7 +3,7 @@ import type { SpotifyTokens, SpotifyUser, Track } from './types'
 const KEYS = {
   tokens: 'pg_tokens',
   user: 'pg_user',
-  library: 'pg_library_v2', // v2: adds albumArt; bump invalidates art-less caches
+  library: 'pg_library_v3', // v3: adds albumArtLarge (cover mosaic); v2 added albumArt
 } as const
 
 interface LibraryCache {

@@ -5,7 +5,8 @@ export interface Track {
   name: string
   artists: string[]
   album: string
-  albumArt: string | null // small album cover URL (display only, comes free in /me/tracks)
+  albumArt: string | null // small (~64px) album cover URL (display only, comes free in /me/tracks)
+  albumArtLarge: string | null // ~300px album cover URL — used for the playlist-cover mosaic
   genres: string[]
   year: number
   popularity: number

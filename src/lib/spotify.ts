@@ -152,9 +152,13 @@ export function buildLibrary(
       const primaryArtistId = item.track.artists[0]?.id ?? ''
       const genres = artistMap.get(primaryArtistId)?.genres ?? []
       const year = parseInt(item.track.album.release_date.slice(0, 4), 10)
-      // images are ordered largest→smallest; the smallest (~64px) suits a thumbnail
+      // images are ordered largest→smallest; the smallest (~64px) suits a thumbnail.
+      // The second-smallest (~300px) is kept for the playlist-cover mosaic.
       const images = item.track.album.images
       const albumArt = images.length ? images[images.length - 1].url : null
+      const albumArtLarge = images.length
+        ? (images[Math.max(0, images.length - 2)]?.url ?? images[0].url)
+        : null
 
       return {
         id: item.track.id,
@@ -162,6 +166,7 @@ export function buildLibrary(
         artists: item.track.artists.map((a) => a.name),
         album: item.track.album.name,
         albumArt,
+        albumArtLarge,
         genres,
         year: isNaN(year) ? 0 : year,
         popularity: item.track.popularity,
@@ -197,6 +202,29 @@ export async function addTracksToPlaylist(
   for (let i = 0; i < trackIds.length; i += 100) {
     const uris = trackIds.slice(i, i + 100).map((id) => `spotify:track:${id}`)
     await apiPost(`/playlists/${playlistId}/items`, accessToken, { uris })
+  }
+}
+
+// Custom playlist cover — base64-encoded JPEG (no data: prefix), max 256 KB.
+// Needs the `ugc-image-upload` scope: tokens issued before the scope was added
+// will 401/403 here, so callers must treat this as non-fatal (re-login fixes it).
+export async function uploadPlaylistCover(
+  accessToken: string,
+  playlistId: string,
+  base64Jpeg: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/playlists/${playlistId}/images`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'image/jpeg',
+    },
+    body: base64Jpeg,
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '(unreadable)')
+    console.error(`Spotify API ${res.status} PUT /playlists/${playlistId}/images\n${body}`)
+    throw Object.assign(new Error(`Cover upload failed (${res.status})`), { status: res.status })
   }
 }
 
