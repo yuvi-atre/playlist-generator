@@ -2,13 +2,16 @@ import { canonicalizeGenre } from './genres'
 import type { CandidateTrack, CurateFilters, Track, VibeExpansion } from './types'
 
 const MAX_CANDIDATES = 150
+// Pass-1 shortlist size for the two-pass select in useCurate: wide enough that
+// genre enrichment can meaningfully re-rank, small enough to keep Last.fm calls sane.
+export const SHORTLIST_SIZE = 300
 const INCLUDE_ARTIST_BOOST = 8 // #1 adaptive cap: rank an explicitly-included artist's tracks high
 
 // ── Scoring knobs (tune these) ────────────────────────────────────────────────
 const GENRE_MATCH_SCORE = 3 // per matching genre string…
 const MAX_GENRE_MATCHES = 3 // …counted at most this many times (#3: cap runaway genre score)
+const AVOID_GENRE_PENALTY = 4 // vibe-expansion says this genre clashes with the vibe
 const ERA_SCORE = 2
-const ARTIST_NAME_SCORE = 5 // vibe token appears in an artist name
 const NAME_MATCH_SCORE = 1 // vibe token appears in the track title
 const POPULARITY_WEIGHT = 1 // soft tiebreak: popularity (0–100) → up to +1 (#3: less mainstream bias)
 const VARIETY_WEIGHT = 0.6 // per-(vibe,track) jitter so ties vary by prompt (#3)
@@ -167,15 +170,19 @@ function scoreTrack(
   track: Track,
   vibeTokens: string[],
   genreKeywords: Set<string>,
+  avoidKeywords: Set<string>,
   eraRanges: Array<[number, number]>
 ): number {
   let s = 0
 
+  // Canonicalize track tags first so keyword hints ("r&b", "lo-fi") match raw
+  // Last.fm variants ("rnb", "lofi") instead of silently missing them.
+  const canonGenres = track.genres.map((g) => canonicalizeGenre(g) ?? g.toLowerCase())
+
   // Genre match — primary signal. Count each genre string at most once, and cap the
   // number of counted matches so a heavily-tagged track can't swamp a perfect single-tag one.
   let genreMatches = 0
-  for (const genre of track.genres) {
-    const g = genre.toLowerCase()
+  for (const g of canonGenres) {
     for (const kw of genreKeywords) {
       if (g.includes(kw)) {
         genreMatches++
@@ -184,6 +191,20 @@ function scoreTrack(
     }
   }
   s += Math.min(genreMatches, MAX_GENRE_MATCHES) * GENRE_MATCH_SCORE
+
+  // Clash penalty — the vibe expansion flagged these genres as fighting the vibe
+  // (e.g. death metal on a sleep playlist). Soft: one penalty, not a hard drop,
+  // so a track tagged both "ambient" and "metal" can still surface if it earns it.
+  if (avoidKeywords.size > 0) {
+    outer: for (const g of canonGenres) {
+      for (const kw of avoidKeywords) {
+        if (g.includes(kw)) {
+          s -= AVOID_GENRE_PENALTY
+          break outer
+        }
+      }
+    }
+  }
 
   // Era match
   if (eraRanges.length > 0 && track.year > 0) {
@@ -195,15 +216,6 @@ function scoreTrack(
     }
   }
 
-  // Artist name mentioned in vibe tokens
-  const artistsLower = track.artists.map((a) => a.toLowerCase())
-  for (const token of vibeTokens) {
-    if (token.length < 3) continue
-    for (const artist of artistsLower) {
-      if (artist.includes(token)) s += ARTIST_NAME_SCORE
-    }
-  }
-
   // Vibe token found in track name
   const nameLower = track.name.toLowerCase()
   for (const token of vibeTokens) {
@@ -211,6 +223,24 @@ function scoreTrack(
   }
 
   return s
+}
+
+// True when the artist's FULL name appears in the vibe as whole words
+// ("give me all drake" names "drake"). Token-in-name substring matching is
+// deliberately avoided: it made "late night drive" boost every artist with
+// "night" in their name and exempt them from the diversity cap — a major
+// source of off-vibe playlists.
+function vibeNamesArtist(vibeLower: string, artistLower: string): boolean {
+  if (artistLower.length < 3) return false
+  let idx = vibeLower.indexOf(artistLower)
+  while (idx !== -1) {
+    const before = idx === 0 || !/[a-z0-9]/.test(vibeLower[idx - 1])
+    const end = idx + artistLower.length
+    const after = end >= vibeLower.length || !/[a-z0-9]/.test(vibeLower[end])
+    if (before && after) return true
+    idx = vibeLower.indexOf(artistLower, idx + 1)
+  }
+  return false
 }
 
 // Substring match of a track's genres against any filter term. Track tags are
@@ -253,7 +283,8 @@ export function preFilter(
   library: Track[],
   vibe: string,
   filters?: CurateFilters,
-  expansion?: VibeExpansion | null
+  expansion?: VibeExpansion | null,
+  limit: number = MAX_CANDIDATES
 ): CandidateTrack[] {
   if (library.length === 0) return []
 
@@ -288,37 +319,53 @@ export function preFilter(
   }
 
   // Haiku vibe-expansion (optional): augment the fixed keyword map so off-dictionary
-  // vibes still get a genre/era signal. Treated as soft signals, same as the built-in ones.
+  // vibes still get a genre/era signal. Treated as soft signals, same as the built-in
+  // ones. Keywords are canonicalized so they land on the same vocabulary as track tags.
+  const avoidKeywords = new Set<string>()
   if (expansion) {
     for (const g of expansion.genres) {
       const kw = g.toLowerCase().trim()
-      if (kw) genreKeywords.add(kw)
+      if (!kw) continue
+      genreKeywords.add(kw)
+      const canon = canonicalizeGenre(kw)
+      if (canon) genreKeywords.add(canon)
+    }
+    for (const g of expansion.avoidGenres) {
+      const kw = g.toLowerCase().trim()
+      if (!kw) continue
+      avoidKeywords.add(canonicalizeGenre(kw) ?? kw)
     }
     for (const start of expansion.decades) {
       if (Number.isFinite(start)) eraRanges.push([start, start + 9])
     }
   }
+  // A genre can't be both wanted and avoided — wanted wins.
+  for (const kw of genreKeywords) avoidKeywords.delete(kw)
 
   const includeArtists = f?.includeArtists ?? []
 
-  // Vibe-mentioned artists: an artist named directly in the free-text vibe (e.g.
-  // "give me all Drake") gets the same depth treatment as the explicit
-  // Include-Artist filter, without needing the filter UI. Same substring rule as
-  // the ARTIST_NAME_SCORE signal below (token length ≥ 3, case-insensitive).
+  // Vibe-mentioned artists: an artist whose FULL name appears in the free-text
+  // vibe (e.g. "give me all Drake") gets the same depth treatment as the explicit
+  // Include-Artist filter, without needing the filter UI.
+  const vibeLower = vibe.toLowerCase()
   const vibeMentionedArtists = new Set<string>()
   for (const track of pool) {
     for (const artist of track.artists) {
       const a = artist.toLowerCase()
       if (vibeMentionedArtists.has(a)) continue
-      if (vibeTokens.some((token) => token.length >= 3 && a.includes(token))) {
-        vibeMentionedArtists.add(a)
-      }
+      if (vibeNamesArtist(vibeLower, a)) vibeMentionedArtists.add(a)
     }
   }
-  const boostArtists = [...new Set([...includeArtists, ...vibeMentionedArtists])]
+
+  // Boost/cap-exemption test: vibe-mentioned artists match by EXACT name (so
+  // "Drake" in the vibe doesn't also boost "Drake Bell"); user-typed include
+  // filters keep substring semantics since they may be partial names.
+  const isBoosted = (track: Track): boolean =>
+    track.artists.some((a) => vibeMentionedArtists.has(a.toLowerCase())) ||
+    artistsMatchAny(track, includeArtists)
 
   const scored = pool.map((track) => {
-    const signal = scoreTrack(track, vibeTokens, genreKeywords, eraRanges)
+    const signal = scoreTrack(track, vibeTokens, genreKeywords, avoidKeywords, eraRanges)
     // Blend a soft popularity nudge (≤ +1) and per-vibe variety jitter (≤ VARIETY_WEIGHT)
     // into the score. Both are smaller than one genre match, so real signal always wins;
     // they only reorder tracks the signal ranks equally (esp. the zero-score long tail).
@@ -326,7 +373,7 @@ export function preFilter(
     const variety = hashUnit(`${vibe}|${track.id}`) * VARIETY_WEIGHT
     // #1 adaptive cap: artists explicitly included OR named in the vibe are the
     // point of the playlist — boost them.
-    const boost = artistsMatchAny(track, boostArtists) ? INCLUDE_ARTIST_BOOST : 0
+    const boost = isBoosted(track) ? INCLUDE_ARTIST_BOOST : 0
     return { track, score: signal + popularity + variety + boost }
   })
 
@@ -341,7 +388,7 @@ export function preFilter(
   for (const { track } of scored) {
     // #1 adaptive cap: when an artist is explicitly included OR named in the
     // vibe, go deep on them — exempt their tracks from the per-artist diversity cap.
-    if (boostArtists.length && artistsMatchAny(track, boostArtists)) {
+    if (isBoosted(track)) {
       picked.push(track)
       continue
     }
@@ -357,7 +404,7 @@ export function preFilter(
 
   return picked
     .concat(overflow)
-    .slice(0, MAX_CANDIDATES)
+    .slice(0, limit)
     .map((track) => ({
       id: track.id,
       name: track.name,

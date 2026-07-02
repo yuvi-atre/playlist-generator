@@ -29,9 +29,7 @@ export function LoginScreen({ onLogin, loading, error }: Props) {
         {loading ? 'Redirecting…' : 'Continue with Spotify'}
       </button>
 
-      {error && (
-        <p className="text-red-400 text-sm text-center max-w-xs">{error.message}</p>
-      )}
+      {error && <p className="text-red-400 text-sm text-center max-w-xs">{error.message}</p>}
     </div>
   )
 }

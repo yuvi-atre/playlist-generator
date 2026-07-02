@@ -1,6 +1,6 @@
 import http from 'node:http'
 
-const PORT = 3001
+const PORT = Number(process.env.API_PORT) || 3001
 
 // Map request path → serverless handler module. Mirrors the files under api/.
 const ROUTES: Record<string, string> = {

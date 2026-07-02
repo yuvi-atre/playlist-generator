@@ -17,17 +17,25 @@ export default function App() {
 function AuthenticatedApp() {
   const auth = useSpotifyAuth()
   const library = useLibrary(auth.getAccessToken)
+  const { load } = library // stable identity (useCallback) — safe as the sole effect dep
 
   // Auto-load library once authenticated
   useEffect(() => {
     if (auth.tokens) {
-      void library.load()
+      void load()
     }
-  }, [auth.tokens, library.load])
+  }, [auth.tokens, load])
 
   if (!auth.tokens) {
     return <LoginScreen onLogin={auth.login} loading={auth.loading} error={auth.error} />
   }
 
-  return <LibraryScreen user={auth.user} library={library} getAccessToken={auth.getAccessToken} onLogout={auth.logout} />
+  return (
+    <LibraryScreen
+      user={auth.user}
+      library={library}
+      getAccessToken={auth.getAccessToken}
+      onLogout={auth.logout}
+    />
+  )
 }

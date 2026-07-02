@@ -36,7 +36,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
   // Show the hero landing first; the prompt view is revealed on "Get Started".
   const [started, setStarted] = useState(false)
 
-  const uniqueArtists = new Set(tracks.flatMap((t) => t.artists)).size
+  const uniqueArtists = useMemo(() => new Set(tracks.flatMap((t) => t.artists)).size, [tracks])
 
   // Genres come from Last.fm (Spotify /v1/artists 403s). Enrich the full library in the
   // BACKGROUND after the list has rendered — never blocks the UI; cached in localStorage.
@@ -136,6 +136,8 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             results={curate.result}
             tracks={enrichedTracks}
             vibe={curate.vibe ?? ''}
+            suggestedName={curate.suggestedName}
+            curatorNote={curate.curatorNote}
             genresByTrack={curate.genresByTrack}
             getAccessToken={getAccessToken}
             onReset={curate.reset}
@@ -867,6 +869,8 @@ function CurateResult({
   results,
   tracks,
   vibe,
+  suggestedName,
+  curatorNote,
   genresByTrack,
   getAccessToken,
   onReset,
@@ -874,17 +878,30 @@ function CurateResult({
   results: CuratedTrack[]
   tracks: Track[]
   vibe: string
+  suggestedName: string | null
+  curatorNote: string | null
   genresByTrack: Map<string, string[]>
   getAccessToken: () => Promise<string>
   onReset: () => void
 }) {
   const trackMap = useMemo(() => new Map(tracks.map((t) => [t.id, t])), [tracks])
+  // Tracks the user has crossed off before saving. Kept in the list (dimmed)
+  // so a mis-click is one tap to undo.
+  const [removed, setRemoved] = useState<Set<string>>(new Set())
+  const kept = useMemo(() => results.filter((r) => !removed.has(r.id)), [results, removed])
+  const toggleRemoved = (id: string) =>
+    setRemoved((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   const genreCount = useMemo(
-    () => new Set(results.flatMap((r) => genresByTrack.get(r.id) ?? [])).size,
-    [results, genresByTrack]
+    () => new Set(kept.flatMap((r) => canonicalizeGenres(genresByTrack.get(r.id) ?? []))).size,
+    [kept, genresByTrack]
   )
   const listRef = useRef<HTMLUListElement>(null)
-  const [playlistName, setPlaylistName] = useState(vibe || 'My Vibe Playlist')
+  const [playlistName, setPlaylistName] = useState(suggestedName || vibe || 'My Vibe Playlist')
 
   // Stagger the curated result cards in. Respects reduced-motion.
   useGSAP(
@@ -946,7 +963,7 @@ function CurateResult({
       await addTracksToPlaylist(
         token,
         playlistId,
-        results.map((r) => r.id)
+        kept.map((r) => r.id)
       )
       const url = `https://open.spotify.com/playlist/${playlistId}`
 
@@ -1003,11 +1020,18 @@ function CurateResult({
       {/* LEFT: summary + save (sticky on desktop) */}
       <div className="flex flex-col gap-5 lg:sticky lg:top-6">
         <div className="flex flex-col gap-1 text-center lg:text-left">
-          <h2 className="text-2xl font-semibold text-white">{results.length} tracks curated</h2>
+          <h2 className="text-2xl font-semibold text-white">
+            {kept.length} track{kept.length !== 1 ? 's' : ''} curated
+          </h2>
           {vibe && <p className="text-zinc-500 text-sm truncate">for “{vibe}”</p>}
           {genreCount > 0 && (
             <p className="text-zinc-600 text-xs">
               spanning {genreCount} genre{genreCount !== 1 ? 's' : ''}
+            </p>
+          )}
+          {curatorNote && (
+            <p className="mt-2 border-l-2 border-green-600/60 pl-3 text-left text-sm leading-relaxed text-zinc-400">
+              {curatorNote}
             </p>
           )}
           <button
@@ -1058,10 +1082,14 @@ function CurateResult({
               />
               <button
                 onClick={() => void handleSave()}
-                disabled={saving || !playlistName.trim()}
+                disabled={saving || !playlistName.trim() || kept.length === 0}
                 className="w-full px-5 py-4 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-base font-semibold transition-colors"
               >
-                {saving ? 'Saving…' : 'Save to Spotify'}
+                {saving
+                  ? 'Saving…'
+                  : kept.length === 0
+                    ? 'No tracks left to save'
+                    : `Save to Spotify (${kept.length})`}
               </button>
             </div>
           )}
@@ -1084,25 +1112,31 @@ function CurateResult({
       >
         {results.map(({ id, reason }, i) => {
           const track = trackMap.get(id)
+          const isRemoved = removed.has(id)
+          const genres = canonicalizeGenres(genresByTrack.get(id) ?? []).slice(0, 3)
           return (
             <li
               key={id}
-              className={`group flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 transition duration-200 ${EASE_QUART} hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-800 motion-reduce:transition-none motion-reduce:hover:translate-y-0`}
+              className={`group flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 transition duration-200 ${EASE_QUART} hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-800 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+                isRemoved ? 'opacity-40' : ''
+              }`}
             >
               <span className="w-5 shrink-0 pt-0.5 text-right text-xs tabular-nums text-zinc-600">
                 {i + 1}
               </span>
               <AlbumArt url={track?.albumArt ?? null} />
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-white">
+                <span
+                  className={`block truncate text-sm font-medium text-white ${isRemoved ? 'line-through' : ''}`}
+                >
                   {track?.name ?? id}
                 </span>
                 <span className="block truncate text-xs text-zinc-500">
                   {track?.artists.join(', ')} · {track?.year}
                 </span>
-                {(genresByTrack.get(id) ?? []).length > 0 && (
+                {genres.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1">
-                    {(genresByTrack.get(id) ?? []).slice(0, 3).map((g) => (
+                    {genres.map((g) => (
                       <span
                         key={g}
                         className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] leading-tight text-zinc-400"
@@ -1118,6 +1152,21 @@ function CurateResult({
                   </p>
                 )}
               </div>
+              {/* Cross a track off (or restore it) before saving. Hidden once the
+                  playlist is saved — the list is a record at that point. */}
+              {!savedUrl && (
+                <button
+                  type="button"
+                  onClick={() => toggleRemoved(id)}
+                  aria-label={
+                    isRemoved ? `Restore ${track?.name ?? id}` : `Remove ${track?.name ?? id}`
+                  }
+                  title={isRemoved ? 'Restore' : 'Remove from playlist'}
+                  className="shrink-0 rounded-md px-2 py-1 text-sm leading-none text-zinc-600 transition-all hover:bg-zinc-700/50 hover:text-zinc-200 lg:opacity-0 lg:focus-visible:opacity-100 lg:group-hover:opacity-100"
+                >
+                  {isRemoved ? '↺' : '×'}
+                </button>
+              )}
             </li>
           )
         })}

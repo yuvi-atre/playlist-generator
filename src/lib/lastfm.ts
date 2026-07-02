@@ -2,7 +2,15 @@ const LASTFM_BASE = 'https://ws.audioscrobbler.com/2.0'
 const CACHE_KEY = 'lastfm_genre_cache'
 const CONCURRENCY = 15
 // Tags that are user sentiment, not genres
-const SKIP_TAGS = new Set(['seen live', 'favourite', 'favorites', 'love', 'awesome', 'beautiful', 'amazing'])
+const SKIP_TAGS = new Set([
+  'seen live',
+  'favourite',
+  'favorites',
+  'love',
+  'awesome',
+  'beautiful',
+  'amazing',
+])
 
 type GenreCache = Record<string, string[]>
 

@@ -74,10 +74,16 @@ export const DEFAULT_FILTERS: CurateFilters = {
   length: 'medium',
 }
 
-// Haiku vibe-expansion: turns a free-text vibe into concrete filter signals so
-// off-dictionary vibes ("rainy Tokyo rooftop") still produce a genre signal.
+// Haiku vibe-expansion: turns a free-text vibe into a full interpretation so
+// off-dictionary vibes ("rainy Tokyo rooftop") still produce real signals.
+// genres/avoidGenres/decades drive the local pre-filter; summary/moods/energy
+// are forwarded to the Sonnet curation pass so both stages share one reading.
 export interface VibeExpansion {
+  summary: string // one-sentence interpretation of the vibe
   genres: string[] // lowercase genre keywords added to preFilter's genre matching
+  avoidGenres: string[] // genres that would clash — scored as a penalty in preFilter
+  moods: string[] // lowercase mood adjectives (e.g. "wistful", "triumphant")
+  energy: 'low' | 'medium' | 'high' | 'mixed'
   decades: number[] // decade start years (e.g. 1990) → soft era scoring ranges
 }
 
@@ -86,6 +92,14 @@ export interface CurateRequest {
   vibe: string
   candidates: CandidateTrack[]
   length?: PlaylistLength
+  // The Haiku interpretation, forwarded so the curation prompt shares the same
+  // reading of the vibe that shaped the candidate pool. Optional — curation
+  // works from the raw vibe alone if expansion failed.
+  interpretation?: {
+    summary: string
+    moods: string[]
+    energy: string
+  }
 }
 
 // Lean candidate payload sent to the LLM (no full Track to keep token count down)
@@ -100,6 +114,8 @@ export interface CandidateTrack {
 // What Claude returns (strict JSON — parse defensively)
 export interface CurateResponse {
   tracks: CuratedTrack[]
+  playlistName?: string // Claude-suggested title — prefills the save input
+  curatorNote?: string // 1–2 sentence note on the playlist's shape/arc
 }
 
 export interface CuratedTrack {

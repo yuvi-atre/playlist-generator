@@ -1,5 +1,11 @@
 import { SPOTIFY_CLIENT_ID, SPOTIFY_REDIRECT_URI, SPOTIFY_SCOPES } from './config'
-import type { SpotifyArtist, SpotifySavedTrackItem, SpotifyTokens, SpotifyUser, Track } from './types'
+import type {
+  SpotifyArtist,
+  SpotifySavedTrackItem,
+  SpotifyTokens,
+  SpotifyUser,
+  Track,
+} from './types'
 
 const ACCOUNTS_BASE = 'https://accounts.spotify.com'
 const API_BASE = 'https://api.spotify.com/v1'
@@ -109,9 +115,7 @@ export async function fetchAllLikedSongs(
       onProgress?.(fetched)
     }
   }
-  await Promise.all(
-    Array.from({ length: Math.min(PAGE_CONCURRENCY, offsets.length) }, worker)
-  )
+  await Promise.all(Array.from({ length: Math.min(PAGE_CONCURRENCY, offsets.length) }, worker))
 
   for (const p of pages) results.push(...p) // offset order preserved
   return results

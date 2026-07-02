@@ -3,15 +3,21 @@
 The PRD is the static spec. This file tracks live build progress. Update it as you go.
 
 ## Status
+
 **Phase:** Steps 1–7 complete + perf/UX + branding overhaul + v2 curation features (filters, genre
-normalization, Haiku vibe-expansion). Full flow verified end-to-end: vibe → curated playlist → real
-playlist saved to Spotify. **Deployed to prod** (live on https://playlist-generator-theta-one.vercel.app
-via `npx vercel --prod --yes`). Latest commit: `0db9163`.
+normalization, Haiku vibe-expansion) + **intelligence-layer v2** (two-pass candidate select, artist-boost
+fix, canonical genre scoring, expansion v2 with moods/energy/avoidGenres, curation prompt v2 with
+playlistName/curatorNote, review-screen track removal). Full flow verified end-to-end: vibe → curated
+playlist → real playlist saved to Spotify. **Deployed to prod** (live on
+https://playlist-generator-theta-one.vercel.app via `npx vercel --prod --yes`). Latest commit: see
+`git log` — intelligence-layer v2 session, 2026-07-01.
 
 ## Live URL
+
 https://playlist-generator-theta-one.vercel.app
 
 ## Done
+
 - Spotify Developer app created (Client ID obtained, redirect URI set).
 - Anthropic Console account + API key created.
 - Spec locked (see PRD.md).
@@ -47,9 +53,11 @@ https://playlist-generator-theta-one.vercel.app
   - `useCurate` exposes `vibe` so CurateResult can default the playlist name.
 
 ## In progress
+
 - (nothing)
 
 ## Session 2026-06-30 — fixes landed
+
 - **Last.fm genre enrichment** (`src/lib/lastfm.ts`): Spotify `/v1/artists` 403s, so genres are
   backfilled from Last.fm top-tags (cached in localStorage). `VITE_LASTFM_API_KEY` env var.
   Wired into `useCurate` before the `/api/curate` call.
@@ -67,6 +75,7 @@ https://playlist-generator-theta-one.vercel.app
 - Error bodies now logged on failed Spotify GET/POST (`apiGetUrl`/`apiPost`).
 
 ## Session 2026-06-30 (cont.) — perf + UX + polish
+
 - **Perf:** `fetchAllLikedSongs` now fetches pages in parallel (concurrency 5) by offset using the
   first page's `total`, instead of chaining `next` serially (~17 serial reqs → ~4 rounds for ~800
   tracks; order preserved, 429 backoff intact). Last.fm enrichment concurrency 5 → 15. `trackMap`
@@ -81,7 +90,9 @@ https://playlist-generator-theta-one.vercel.app
   rules incl. GSAP conventions, component patterns). Read it before adding UI.
 
 ## Session 2026-06-30 (branding + visual overhaul)
+
 All committed (`d6c3f20` and prior) and deployed. Order of work:
+
 - **Brand assets** (`public/`): robot `favicon.svg` (replaced the leftover purple scaffold logo),
   `og-image.png` (1200×630 social card). `index.html` got a real `<title>`, description, and full
   Open Graph + Twitter meta. OG banner is **social-share only** (user's call) — not shown in-app;
@@ -113,12 +124,14 @@ All committed (`d6c3f20` and prior) and deployed. Order of work:
   promo later, not UI).
 
 ## Session 2026-07-01 — BrandBanner + upscale + real genre count
+
 All committed (`ce47460`) and deployed.
+
 - **BrandBanner** (Claude-design component in `LibraryScreen.tsx`): robot + "Playlist Generator"
   wordmark + live equalizer (HTML divs using the `robot-eq` class). Anchors the bottom of the library
   workspace's left column.
 - **Upscaled the library-ready area:** left column `19rem → 24rem` (`max-w-6xl`, `gap-10`), vibe input
-  + Generate button enlarged to `py-4 text-base`.
+  - Generate button enlarged to `py-4 text-base`.
 - **Genre count is now real on the library screen.** `LibraryScreen` runs a BACKGROUND full-library
   Last.fm enrich (`fetchArtistGenres` over all unique first-artists) in a `useEffect` after render —
   non-blocking, cached; `uniqueGenres` derives from that map so the "genres" stat fills in a few
@@ -127,6 +140,7 @@ All committed (`ce47460`) and deployed.
   if throttled.
 
 ## Session 2026-07-01 (cont.) — share button + search roadmap
+
 - **Share button** on the saved screen (`CurateResult`): Web Share API (native sheet on mobile →
   iMessage/AirDrop) with a clipboard-copy fallback on desktop. Spotify links already unfurl rich
   previews, so the link is the share.
@@ -137,7 +151,9 @@ All committed (`ce47460`) and deployed.
   free/local)**; #5 candidate count. Full detail in the `project_roadmap` memory.
 
 ## Session 2026-07-01 (cont.) — search/playlist filters + genre normalization
+
 Committed to `main` (`53be24d`, `5a2cd85`); DEPLOYED to prod (see later session).
+
 - **Filters** (`src/lib/types.ts` `CurateFilters`, `preFilter.ts`, `useCurate.ts`, `LibraryScreen.tsx`
   `FiltersPanel`): include/exclude genres, include/exclude artists, decade gate, playlist length.
   HARD gates applied in preFilter BEFORE scoring (AND across dims, OR within); vibe ranks the survivors.
@@ -156,7 +172,9 @@ Committed to `main` (`53be24d`, `5a2cd85`); DEPLOYED to prod (see later session)
   and caused "State mismatch — CSRF"; do the whole dev flow on **127.0.0.1:5173** (matches redirect URI).
 
 ## Session 2026-07-01 (cont.) — Haiku vibe-expansion + deploy + layout/mascot
+
 All committed to `main` and DEPLOYED to prod (`0db9163` live; `git push origin main` also done).
+
 - **Haiku vibe-expansion (DONE, `6056e1e`):** `api/expand-vibe.ts` POST `{ vibe }` → `{ genres, decades }`
   via `claude-haiku-4-5-20251001` (structured JSON, mirrors curate.ts params; ~$0.0003/call). `useCurate`
   runs it FIRST (new `expanding` phase), caches per-vibe in localStorage (`pg_vibe_expansion`), and is
@@ -180,7 +198,51 @@ All committed to `main` and DEPLOYED to prod (`0db9163` live; `git push origin m
 - **oxlint schema fix (`c10a352`):** `.oxlintrc.json` `$schema` → unpkg URL (the relative node_modules
   path failed under VSCode's `git:` scheme in diff views).
 
+## Session 2026-07-01 (cont.) — intelligence-layer v2 (curation quality overhaul)
+
+User report: curation "hasn't been going well." Root-caused three pipeline defects and rebuilt the
+intelligence layer around them. Committed to `main` and DEPLOYED to prod (`npx vercel --prod --yes`)
+at session end — see the Status block for the live commit.
+
+- **Bug 1 — cold-start genre gap (the big one):** `preFilter` scored on `track.genres`, but Last.fm
+  enrichment ran AFTER pre-filtering — on a cold cache every track scored 0 on genre and the candidate
+  set was basically popularity + jitter. **Fix: two-pass select in `useCurate`** — pass 1 takes a wide
+  shortlist (`SHORTLIST_SIZE = 300`, exported from `preFilter.ts`), its artists get Last.fm-enriched,
+  then pass 2 re-runs `preFilter` on the enriched shortlist and cuts to the final 150.
+  (`preFilter` gained an optional `limit` param.)
+- **Bug 2 — common-word artist boost:** vibe tokens ≥3 chars substring-matched artist names, so
+  "late **night** drive" gave every artist with "night" in the name +5/token, +8 boost, AND exemption
+  from the per-artist cap → one wrong artist flooded the playlist. **Fix:** artist mention now requires
+  the FULL artist name in the vibe at word boundaries (`vibeNamesArtist`); the separate
+  `ARTIST_NAME_SCORE` token signal was removed (the boost covers it); boost matching is exact-name for
+  vibe mentions (so "Drake" doesn't boost "Drake Bell") and substring only for user-typed include filters.
+- **Bug 3 — canonicalization missing from scoring:** track tags are now canonicalized in `scoreTrack`
+  (raw "rnb"/"lofi" tags now match "r&b"/"lo-fi" hints). Expansion keywords also canonicalized.
+- **Vibe expansion v2 (`api/expand-vibe.ts`):** Haiku now returns `{ summary, genres, avoidGenres,
+moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_PENALTY = 4`) in
+  `preFilter`; wanted-genres win ties. Decades hint discarded when Haiku lists >3 decades (genre
+  association noise, verified live: "rainy Tokyo rooftop" → 4 decades). Expansion cache key bumped
+  `pg_vibe_expansion` → `pg_vibe_expansion_v2`. ✅ Runtime-verified live (Haiku + structured outputs OK).
+- **Curation prompt v2 (`api/curate.ts`):** selection principles (mood/energy fit over genre match,
+  cohesion over popularity, no duplicate versions of a song), ordering principles (strong open, energy
+  arc per vibe, memorable close), and the Haiku interpretation (summary/moods/energy) forwarded from the
+  client via `CurateRequest.interpretation`. Response now includes **`playlistName`** (prefills the save
+  input) and **`curatorNote`** (shown on the review screen). Server-side candidate cap
+  (`MAX_ACCEPTED_CANDIDATES = 200`) protects spend. ✅ Runtime-verified live with a synthetic candidate
+  set: rejected off-vibe plants (polka/hardstyle), returned 7 instead of padding to 15, good name + note.
+- **Review-screen capabilities (`LibraryScreen.tsx` `CurateResult`):** per-track **remove/restore** (×/↺,
+  hover-revealed on lg+, always visible below; removed cards dim + strike-through; header count, genre
+  count, and Save all track the kept set; Save shows `(N)` and disables at 0; buttons hidden post-save),
+  Claude-suggested playlist name prefill, curator-note callout, genre pills + genre count now canonicalized.
+- **Housekeeping:** `scripts/dev-api.ts` port now overridable via `API_PORT` env var; repo-wide
+  `prettier --write` (baseline was dirty — `npm run lint` now actually passes); App.tsx exhaustive-deps
+  warning fixed (destructure stable `load`); memoized `uniqueArtists`.
+- ⚠️ **Worktree note:** this session ran in a git worktree without `.env` — local API testing used
+  `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
+  `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.
+
 ## Next step (older open ideas, none started)
+
 - **Search filtering #3 + #4** — DONE (`preFilter.ts`, knobs are named constants). Live `111fdbd`.
 - **v2 curation features (validated 2026-07-01, not started; full detail in `project_roadmap` memory):**
   1. **Artist-focused playlists.** ⚠️ Conflicts with the `MAX_PER_ARTIST=3` diversity cap — reconcile
@@ -202,9 +264,11 @@ All committed to `main` and DEPLOYED to prod (`0db9163` live; `git push origin m
 - Optional: promo video via Higgsfield (asset generator, not UI code) for sharing the project.
 
 ## Open questions
+
 - "impeccable" — a friend's recommendation we couldn't identify (studio? template? font?). Need a link.
 
 ## Decisions log
+
 - Two-stage curation (code pre-filter → Claude pass). [PRD §8]
 - Vercel serverless backend holds the Anthropic key. [PRD §9]
 - Model A: single shared key + Console spend cap. [PRD §9]
@@ -217,6 +281,7 @@ All committed to `main` and DEPLOYED to prod (`0db9163` live; `git push origin m
 - `vercel dev` incompatible with Vite 8 — local dev uses `npm run dev` + `npm run dev:api` instead.
 
 ## Known Issues
+
 - **`dev:api` does NOT hot-reload:** `npm run dev:api` caches the imported `api/curate.ts` in Node's
   ESM module cache. After editing `api/curate.ts` you MUST restart `dev:api`, or you'll test stale code.
   (Cost us a long debugging loop — the code was right, the running server wasn't.)
@@ -228,9 +293,11 @@ All committed to `main` and DEPLOYED to prod (`0db9163` live; `git push origin m
   users to re-auth. Deferred to v2 per PRD.
 
 ## Blockers
+
 - (none)
 
 ## Local dev setup
+
 - Run with TWO terminals (vercel dev is incompatible with Vite 8):
   - Tab 1: `npm run dev:api` (local API server on port 3001, reads .env)
   - Tab 2: `npm run dev` (Vite on port 5173)
@@ -238,12 +305,14 @@ All committed to `main` and DEPLOYED to prod (`0db9163` live; `git push origin m
 - Spotify redirect URI for local dev: `http://127.0.0.1:5173/callback` (must be in Spotify dashboard)
 
 ## Vercel env vars (production) — all set (verified via `vercel env ls production`)
+
 - `VITE_SPOTIFY_CLIENT_ID` — set
 - `VITE_SPOTIFY_REDIRECT_URI` — set to https://playlist-generator-theta-one.vercel.app/callback
 - `ANTHROPIC_API_KEY` — set (rotate in Anthropic Console if exposed)
 - `VITE_LASTFM_API_KEY` — set (Preview + Production)
 
 ## Redeploy
+
 - `npx vercel --prod --yes` from the repo (CLI authed as `yuvi-atre`, project linked via `.vercel/`).
 - `git push origin main` also updates the GitHub remote. A transient "Not authorized" on deploy just
   needs a retry.

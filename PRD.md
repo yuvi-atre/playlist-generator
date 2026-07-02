@@ -8,7 +8,7 @@
 
 ## 1. Problem
 
-My Spotify liked-songs library is a graveyard — hundreds of tracks with no organization. Spotify's own tools make me build playlists manually, song by song. There's no way to say "give me something for Minecraft with the boys" and get a curated set pulled from *my own* library.
+My Spotify liked-songs library is a graveyard — hundreds of tracks with no organization. Spotify's own tools make me build playlists manually, song by song. There's no way to say "give me something for Minecraft with the boys" and get a curated set pulled from _my own_ library.
 
 ## 2. Goal
 
@@ -38,16 +38,16 @@ Conversational playlist generation from a user's liked songs. Prompt a chatbot w
 
 ## 6. Functional requirements
 
-| ID | Requirement |
-|----|-------------|
-| FR1 | Spotify OAuth (Authorization Code + PKCE), scopes `user-library-read` and `playlist-modify-private`. |
-| FR2 | Fetch all liked songs (paginate `/me/tracks`, 50/page), enrich with artist genres. |
-| FR3 | Cache the library in localStorage; manual "refresh library" button to re-pull. |
-| FR4 | Chat interface that takes a vibe prompt. |
+| ID  | Requirement                                                                                                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1 | Spotify OAuth (Authorization Code + PKCE), scopes `user-library-read` and `playlist-modify-private`.                                               |
+| FR2 | Fetch all liked songs (paginate `/me/tracks`, 50/page), enrich with artist genres.                                                                 |
+| FR3 | Cache the library in localStorage; manual "refresh library" button to re-pull.                                                                     |
+| FR4 | Chat interface that takes a vibe prompt.                                                                                                           |
 | FR5 | Two-stage curation: (a) code pre-filter to ~150 candidates, (b) Claude curation pass returning structured JSON (track IDs + one-line reason each). |
-| FR6 | Review screen — remove tracks, regenerate, rename playlist, toggle public/private. |
-| FR7 | Create playlist + add selected tracks via the API. |
-| FR8 | Handle failure cases — token expiry, empty results, rate limits, API errors. |
+| FR6 | Review screen — remove tracks, regenerate, rename playlist, toggle public/private.                                                                 |
+| FR7 | Create playlist + add selected tracks via the API.                                                                                                 |
+| FR8 | Handle failure cases — token expiry, empty results, rate limits, API errors.                                                                       |
 
 ## 7. Constraints & risks
 
@@ -78,6 +78,7 @@ Conversational playlist generation from a user's liked songs. Prompt a chatbot w
 - **Key strategy:** **Model A** — one shared key (mine), held in the serverless backend. End users just log in with Spotify; they never touch an API key. Protected by a **hard spend cap set in the Anthropic Console** so a bug or curious user can't run up a bill.
 
 ### Key & secret handling
+
 - Anthropic API key comes from the **Anthropic Console** (`console.anthropic.com`) — separate product/billing from any Claude.ai subscription. Subscription credits do NOT fund the API.
 - Local dev: key in a **gitignored `.env`**, read only by the serverless function.
 - Production: key in **Vercel environment variables**, never in the bundle.
@@ -101,7 +102,7 @@ No audio features, so the model stays lean.
 
 - **App name:** (your choice — shows on consent screen)
 - **APIs:** Web API only (no Web Playback SDK / iOS / Android / Ads)
-- **Redirect URI (dev):** `http://127.0.0.1:5173/callback`  ← use the IP form, not `localhost`; must match code exactly
+- **Redirect URI (dev):** `http://127.0.0.1:5173/callback` ← use the IP form, not `localhost`; must match code exactly
 - **Redirect URI (prod):** add the Vercel URL when deployed
 - **Scopes:** `user-library-read`, `playlist-modify-private`
 - **Client ID:** from app Settings → goes in frontend config

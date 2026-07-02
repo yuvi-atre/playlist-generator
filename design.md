@@ -5,6 +5,7 @@ intentional and consistent instead of ad-hoc. Tokens map to Tailwind utility
 classes (Tailwind v4, no config file — utilities are used directly in JSX).
 
 ## Design principles
+
 1. **Dark, quiet, content-first.** The library and the curated playlist are the
    product. Chrome recedes; music metadata is the focus. Near-black canvas, low-
    chroma grays, one saturated accent.
@@ -16,19 +17,21 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
    (LLM/network); never fake a percentage.
 
 ## Color tokens
-| Role | Value / Tailwind | Notes |
-|------|------------------|-------|
-| Canvas | `#0a0a0a` (body bg) | Near-black, not pure black |
-| Surface | `bg-zinc-900` | Cards, inputs |
-| Border | `border-zinc-800` / `border-zinc-700` | 800 subtle, 700 for inputs |
-| Text primary | `#f5f5f5` / `text-white` | Titles, track names |
-| Text secondary | `text-zinc-400` | Supporting copy |
-| Text tertiary | `text-zinc-500` / `text-zinc-600` | Artists, years, timestamps |
-| Accent | `bg-green-600` → `hover:bg-green-500` | Primary buttons only |
-| Success | `text-green-400` | "Playlist saved", granted states |
-| Error | `text-red-400` | Failures |
+
+| Role           | Value / Tailwind                      | Notes                            |
+| -------------- | ------------------------------------- | -------------------------------- |
+| Canvas         | `#0a0a0a` (body bg)                   | Near-black, not pure black       |
+| Surface        | `bg-zinc-900`                         | Cards, inputs                    |
+| Border         | `border-zinc-800` / `border-zinc-700` | 800 subtle, 700 for inputs       |
+| Text primary   | `#f5f5f5` / `text-white`              | Titles, track names              |
+| Text secondary | `text-zinc-400`                       | Supporting copy                  |
+| Text tertiary  | `text-zinc-500` / `text-zinc-600`     | Artists, years, timestamps       |
+| Accent         | `bg-green-600` → `hover:bg-green-500` | Primary buttons only             |
+| Success        | `text-green-400`                      | "Playlist saved", granted states |
+| Error          | `text-red-400`                        | Failures                         |
 
 ## Typography
+
 - **Family:** `system-ui, -apple-system, sans-serif` (fast, native, no web-font
   load). Revisit only if branding demands a display face.
 - **Scale (in use):** page title `text-2xl` semibold; section title `text-xl`
@@ -36,6 +39,7 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
 - **Truncation:** long track/artist names use `truncate` + `min-w-0` in flex rows.
 
 ## Spacing & shape
+
 - **Radius:** `rounded-xl` for buttons/inputs, `rounded-lg` for list rows,
   `rounded-full` for progress bars/pills.
 - **Rhythm:** vertical gaps `gap-2 / gap-3 / gap-6 / gap-8`; control padding
@@ -45,6 +49,7 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
   `hover:text-white` / `hover:text-zinc-300` with `transition-colors`.
 
 ## Motion — follows the Impeccable spec (github.com/pbakaus/impeccable)
+
 - **Easing:** `ease-out-quart` = `cubic-bezier(0.165, 0.84, 0.44, 1)` (GSAP equivalent `expo.out`).
   Const `EASE_QUART` in `LibraryScreen.tsx` for the Tailwind arbitrary value. NO bounce/elastic/linear
   (linear only for the indeterminate progress bar).
@@ -54,6 +59,7 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
   helper for GSAP; `motion-reduce:` utilities for CSS transitions).
 
 ## Motion (GSAP + CSS)
+
 - **Library:** GSAP (`gsap` + `@gsap/react`) is available. Use the `useGSAP()`
   hook (auto-cleanup); scope animations to a ref, don't animate globally.
 - **Curated results:** stagger cards in — `opacity 0→1`, `y 12→0`, `duration 0.4`,
@@ -67,10 +73,11 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
   `window.matchMedia('(prefers-reduced-motion: reduce)').matches` and skip.
 
 ## Component patterns
+
 - **Primary button:** `bg-green-600 hover:bg-green-500 disabled:opacity-40
-  rounded-xl px-5 py-3 text-sm font-medium text-white transition-colors`.
+rounded-xl px-5 py-3 text-sm font-medium text-white transition-colors`.
 - **Text input:** `rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3
-  text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500`.
+text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500`.
 - **List row:** flex, `justify-between`, `px-3 py-2 rounded-lg hover:bg-zinc-900`.
 - **Result card:** `group` row — index number, `AlbumArt`, then track name / artist·year / genre
   pills / italic reason (left-border quote). Hover: `-translate-y-0.5` + border/bg lift, `EASE_QUART`.
@@ -88,6 +95,7 @@ classes (Tailwind v4, no config file — utilities are used directly in JSX).
   enrichment of the full library runs after render (non-blocking, cached).
 
 ## Not yet defined (decide before building)
+
 - Public/private playlist toggle styling (v2 — needs `playlist-modify-public`).
 - 2×2 album-art cover mosaic + animated save-success (checkmark/confetti) on the review screen.
 - Empty / error illustration states beyond plain text.
