@@ -901,7 +901,10 @@ function CurateResult({
     [kept, genresByTrack]
   )
   const listRef = useRef<HTMLUListElement>(null)
-  const [playlistName, setPlaylistName] = useState(suggestedName || vibe || 'My Vibe Playlist')
+  // The name input strictly reflects what the USER typed — the intelligence
+  // layer never edits user-facing text on its own. Claude's suggested title is
+  // offered as an opt-in chip below the input instead of prefilling it.
+  const [playlistName, setPlaylistName] = useState(vibe || 'My Vibe Playlist')
 
   // Stagger the curated result cards in. Respects reduced-motion.
   useGSAP(
@@ -1030,9 +1033,12 @@ function CurateResult({
             </p>
           )}
           {curatorNote && (
-            <p className="mt-2 border-l-2 border-green-600/60 pl-3 text-left text-sm leading-relaxed text-zinc-400">
-              {curatorNote}
-            </p>
+            <div className="mt-2 border-l-2 border-green-600/60 pl-3 text-left">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-600">
+                Curator’s note
+              </span>
+              <p className="text-sm leading-relaxed text-zinc-400">{curatorNote}</p>
+            </div>
           )}
           <button
             onClick={onReset}
@@ -1080,6 +1086,17 @@ function CurateResult({
                 disabled={saving}
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-base text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
               />
+              {/* Opt-in AI title: shown only while it differs from the current name. */}
+              {suggestedName && suggestedName !== playlistName && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setPlaylistName(suggestedName)}
+                  className="self-start text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                >
+                  Suggestion: <span className="text-green-400">“{suggestedName}”</span> — tap to use
+                </button>
+              )}
               <button
                 onClick={() => void handleSave()}
                 disabled={saving || !playlistName.trim() || kept.length === 0}

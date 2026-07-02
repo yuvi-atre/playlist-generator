@@ -238,6 +238,11 @@ moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_
 - **Housekeeping:** `scripts/dev-api.ts` port now overridable via `API_PORT` env var; repo-wide
   `prettier --write` (baseline was dirty — `npm run lint` now actually passes); App.tsx exhaustive-deps
   warning fixed (destructure stable `load`); memoized `uniqueArtists`.
+- **Follow-up (user feedback, same day):** typed "anime night" → save input prefilled "…marathon"
+  (Claude's `playlistName`). **DECIDED: the intelligence layer never edits user-facing text on its
+  own.** The name input now prefills with the RAW vibe; Claude's title shows as an opt-in
+  "Suggestion: …— tap to use" chip below it (hidden once applied/matching), and the curator note got
+  an explicit "Curator's note" label. Committed + deployed.
 - ⚠️ **Worktree note:** this session ran in a git worktree without `.env` — local API testing used
   `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
   `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.
