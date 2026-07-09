@@ -399,29 +399,6 @@ function LibraryStats({
     )
   }, [tracks, search])
 
-  // Sync the right column's height to the left column's actual rendered height
-  // (lg+ only, where they sit side by side) — so opening/closing Filters grows
-  // or shrinks the song list to match, instead of the panel floating or being
-  // independently capped. Falls back to the default vh-based cap below `lg` or
-  // before the first measurement.
-  const leftColRef = useRef<HTMLDivElement>(null)
-  const [syncedHeight, setSyncedHeight] = useState<number | null>(null)
-  useEffect(() => {
-    const el = leftColRef.current
-    if (!el) return
-    const update = () => {
-      setSyncedHeight(window.matchMedia('(min-width: 1024px)').matches ? el.offsetHeight : null)
-    }
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    window.addEventListener('resize', update)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [])
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = vibe.trim()
@@ -429,12 +406,14 @@ function LibraryStats({
   }
 
   return (
-    <div
-      ref={rootRef}
-      className="w-full max-w-7xl grid gap-12 lg:grid-cols-[26rem_1fr] items-start"
-    >
-      {/* LEFT: library info + vibe prompt (sticky on desktop) */}
-      <div ref={leftColRef} className="flex flex-col gap-6 lg:sticky lg:top-6">
+    // No `items-start`: on lg the RIGHT cell stretches to the row height, which
+    // the LEFT column's content defines (the right pane is absolute, so it adds
+    // none). That keeps the song list bottom-aligned with the left column via
+    // pure CSS — the browser tracks every frame of the Filters animation with
+    // no ResizeObserver → setState → snap (the old jitter).
+    <div ref={rootRef} className="w-full max-w-7xl grid gap-12 lg:grid-cols-[26rem_1fr]">
+      {/* LEFT: library info + vibe prompt — defines the row height on desktop */}
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 text-center lg:text-left">
           <h2 className="text-2xl font-semibold text-white">Your library is ready</h2>
 
@@ -505,40 +484,44 @@ function LibraryStats({
         />
       </div>
 
-      {/* RIGHT: song browser — bounded scroll pane */}
-      <div className="flex flex-col gap-3 min-w-0 text-left">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search songs or artists…"
-          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
-        />
+      {/* RIGHT: song browser. On lg the pane is absolutely positioned to fill
+          its (stretched) grid cell, so its height mirrors the left column
+          natively — including mid-animation while Filters opens/closes. Below
+          lg it's normal flow with a viewport cap. */}
+      <div className="relative min-w-0">
+        <div className="flex flex-col gap-3 text-left lg:absolute lg:inset-0">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search songs or artists…"
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
+          />
 
-        {search && (
-          <p className="text-zinc-500 text-xs">
-            {filtered.length} result{filtered.length !== 1 ? 's' : ''}
-          </p>
-        )}
+          {search && (
+            <p className="text-zinc-500 text-xs">
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+            </p>
+          )}
 
-        <ul
-          className="custom-scrollbar flex flex-col gap-1 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-11rem)]"
-          style={syncedHeight ? { maxHeight: syncedHeight } : undefined}
-        >
-          {filtered.map((t) => (
-            <li
-              key={t.id}
-              className="lib-row flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors"
-            >
-              <AlbumArt url={t.albumArt} size={36} />
-              <div className="min-w-0 flex-1">
-                <span className="text-white text-sm truncate block">{t.name}</span>
-                <span className="text-zinc-500 text-xs truncate block">{t.artists.join(', ')}</span>
-              </div>
-              <span className="text-zinc-600 text-xs shrink-0">{t.year || '—'}</span>
-            </li>
-          ))}
-        </ul>
+          <ul className="custom-scrollbar flex flex-col gap-1 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-none lg:flex-1 lg:min-h-0">
+            {filtered.map((t) => (
+              <li
+                key={t.id}
+                className="lib-row flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors"
+              >
+                <AlbumArt url={t.albumArt} size={36} />
+                <div className="min-w-0 flex-1">
+                  <span className="text-white text-sm truncate block">{t.name}</span>
+                  <span className="text-zinc-500 text-xs truncate block">
+                    {t.artists.join(', ')}
+                  </span>
+                </div>
+                <span className="text-zinc-600 text-xs shrink-0">{t.year || '—'}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   )
@@ -610,6 +593,7 @@ function FiltersPanel({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="flex w-full items-center justify-between px-4 py-3 text-sm text-zinc-300 hover:text-white transition-colors"
       >
         <span className="flex items-center gap-2">
@@ -623,152 +607,163 @@ function FiltersPanel({
         <span className={`text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
       </button>
 
-      {open && (
-        <div className="flex flex-col gap-5 border-t border-zinc-800 px-4 py-4">
-          {/* Length */}
-          <div className="flex flex-col gap-2">
-            <FilterLabel>Playlist length</FilterLabel>
-            <div className="flex gap-1.5">
-              {LENGTH_OPTIONS.map((opt) => {
-                const active = filters.length === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onChange({ ...filters, length: opt.value })}
-                    className={`flex-1 rounded-lg border px-2 py-2 text-xs transition-colors ${
-                      active
-                        ? 'border-green-500 bg-green-500/10 text-green-300'
-                        : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                    }`}
-                  >
-                    {opt.label}
-                    <span className="ml-1 text-zinc-600">{opt.hint}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Decades */}
-          <div className="flex flex-col gap-2">
-            <FilterLabel>Decades</FilterLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {DECADE_OPTIONS.map((d) => {
-                const active = filters.decades.includes(d.start)
-                return (
-                  <button
-                    key={d.start}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() =>
-                      onChange({ ...filters, decades: toggle(filters.decades, d.start) })
-                    }
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                      active
-                        ? 'border-green-500 bg-green-500/10 text-green-300'
-                        : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                    }`}
-                  >
-                    {d.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Genres */}
-          <div className="flex flex-col gap-2">
-            <FilterLabel>
-              Genres
-              <span className="ml-2 font-normal normal-case text-zinc-500">
-                tap <span className="text-green-400">＋include</span>, again{' '}
-                <span className="text-red-400">－exclude</span>
-              </span>
-            </FilterLabel>
-            {genreOptions.length === 0 ? (
-              <p className="text-xs text-zinc-600">Loading genres from your library…</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {genreOptions.map((g) => {
-                  const inc = filters.includeGenres.includes(g)
-                  const exc = filters.excludeGenres.includes(g)
+      {/* Height-animated collapse: grid-template-rows 0fr↔1fr tweens the row,
+          the overflow-hidden child clips mid-animation. Content stays mounted
+          (chip state survives); `inert` keeps collapsed controls out of the
+          tab order. The right song pane follows the height natively — see the
+          grid-cell note in LibraryStats. */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ${EASE_QUART} motion-reduce:transition-none ${
+          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div inert={!open} className="min-h-0 overflow-hidden">
+          <div className="flex flex-col gap-5 border-t border-zinc-800 px-4 py-4">
+            {/* Length */}
+            <div className="flex flex-col gap-2">
+              <FilterLabel>Playlist length</FilterLabel>
+              <div className="flex gap-1.5">
+                {LENGTH_OPTIONS.map((opt) => {
+                  const active = filters.length === opt.value
                   return (
                     <button
-                      key={g}
+                      key={opt.value}
                       type="button"
                       disabled={disabled}
-                      onClick={() => cycleGenre(g)}
-                      className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                        inc
+                      onClick={() => onChange({ ...filters, length: opt.value })}
+                      className={`flex-1 rounded-lg border px-2 py-2 text-xs transition-colors ${
+                        active
                           ? 'border-green-500 bg-green-500/10 text-green-300'
-                          : exc
-                            ? 'border-red-500 bg-red-500/10 text-red-300'
-                            : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                          : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
                       }`}
                     >
-                      {inc && <span className="mr-0.5 font-semibold">＋</span>}
-                      {exc && <span className="mr-0.5 font-semibold">－</span>}
-                      <span className={exc ? 'line-through' : ''}>{g}</span>
+                      {opt.label}
+                      <span className="ml-1 text-zinc-600">{opt.hint}</span>
                     </button>
                   )
                 })}
               </div>
+            </div>
+
+            {/* Decades */}
+            <div className="flex flex-col gap-2">
+              <FilterLabel>Decades</FilterLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {DECADE_OPTIONS.map((d) => {
+                  const active = filters.decades.includes(d.start)
+                  return (
+                    <button
+                      key={d.start}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() =>
+                        onChange({ ...filters, decades: toggle(filters.decades, d.start) })
+                      }
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        active
+                          ? 'border-green-500 bg-green-500/10 text-green-300'
+                          : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Genres */}
+            <div className="flex flex-col gap-2">
+              <FilterLabel>
+                Genres
+                <span className="ml-2 font-normal normal-case text-zinc-500">
+                  tap <span className="text-green-400">＋include</span>, again{' '}
+                  <span className="text-red-400">－exclude</span>
+                </span>
+              </FilterLabel>
+              {genreOptions.length === 0 ? (
+                <p className="text-xs text-zinc-600">Loading genres from your library…</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {genreOptions.map((g) => {
+                    const inc = filters.includeGenres.includes(g)
+                    const exc = filters.excludeGenres.includes(g)
+                    return (
+                      <button
+                        key={g}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => cycleGenre(g)}
+                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                          inc
+                            ? 'border-green-500 bg-green-500/10 text-green-300'
+                            : exc
+                              ? 'border-red-500 bg-red-500/10 text-red-300'
+                              : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                        }`}
+                      >
+                        {inc && <span className="mr-0.5 font-semibold">＋</span>}
+                        {exc && <span className="mr-0.5 font-semibold">－</span>}
+                        <span className={exc ? 'line-through' : ''}>{g}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Artists */}
+            <ArtistPicker
+              label="Only these artists"
+              accent="green"
+              options={artistOptions}
+              selected={filters.includeArtists}
+              disabled={disabled}
+              onAdd={(name) =>
+                onChange({
+                  ...filters,
+                  includeArtists: [...new Set([...filters.includeArtists, name])],
+                })
+              }
+              onRemove={(name) =>
+                onChange({
+                  ...filters,
+                  includeArtists: filters.includeArtists.filter((x) => x !== name),
+                })
+              }
+            />
+            <ArtistPicker
+              label="Never these artists"
+              accent="red"
+              options={artistOptions}
+              selected={filters.excludeArtists}
+              disabled={disabled}
+              onAdd={(name) =>
+                onChange({
+                  ...filters,
+                  excludeArtists: [...new Set([...filters.excludeArtists, name])],
+                })
+              }
+              onRemove={(name) =>
+                onChange({
+                  ...filters,
+                  excludeArtists: filters.excludeArtists.filter((x) => x !== name),
+                })
+              }
+            />
+
+            {gateCount > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="self-start text-xs text-zinc-500 underline transition-colors hover:text-zinc-300"
+              >
+                Clear filters
+              </button>
             )}
           </div>
-
-          {/* Artists */}
-          <ArtistPicker
-            label="Only these artists"
-            accent="green"
-            options={artistOptions}
-            selected={filters.includeArtists}
-            disabled={disabled}
-            onAdd={(name) =>
-              onChange({
-                ...filters,
-                includeArtists: [...new Set([...filters.includeArtists, name])],
-              })
-            }
-            onRemove={(name) =>
-              onChange({
-                ...filters,
-                includeArtists: filters.includeArtists.filter((x) => x !== name),
-              })
-            }
-          />
-          <ArtistPicker
-            label="Never these artists"
-            accent="red"
-            options={artistOptions}
-            selected={filters.excludeArtists}
-            disabled={disabled}
-            onAdd={(name) =>
-              onChange({
-                ...filters,
-                excludeArtists: [...new Set([...filters.excludeArtists, name])],
-              })
-            }
-            onRemove={(name) =>
-              onChange({
-                ...filters,
-                excludeArtists: filters.excludeArtists.filter((x) => x !== name),
-              })
-            }
-          />
-
-          {gateCount > 0 && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="self-start text-xs text-zinc-500 underline transition-colors hover:text-zinc-300"
-            >
-              Clear filters
-            </button>
-          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

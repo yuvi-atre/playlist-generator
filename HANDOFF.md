@@ -271,6 +271,15 @@ moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_
     cache capped at 40 entries (oldest evicted); library rows use `content-visibility: auto`
     (`.lib-row`, `contain-intrinsic-size: 52px`) so the full no-pagination list only pays for visible
     rows; playlist-name input got `maxLength` + aria-label.
+- **Filters jitter fix (user report):** opening/closing Filters snapped. Two causes: the panel
+  mounted/unmounted instantly (`{open && …}`), and the song list's height came from a
+  ResizeObserver → React state → style pipeline that landed a frame late. **Both replaced with pure
+  CSS:** (1) the panel now animates via the `grid-template-rows: 0fr↔1fr` trick (300ms ease-out-quart,
+  content stays mounted, `inert` when collapsed, `aria-expanded` on the toggle, reduced-motion
+  honored); (2) the JS height-sync (leftColRef/syncedHeight/ResizeObserver) is GONE — on lg the right
+  pane is `absolute inset-0` in a stretched grid cell whose row height the left column defines, so the
+  browser tracks the animated height natively every frame. Below lg unchanged (normal flow, 70vh cap).
+  The left column's `lg:sticky` was removed (it was already inert — the list never exceeds the column).
 - ⚠️ **Worktree note:** this session ran in a git worktree without `.env` — local API testing used
   `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
   `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.
