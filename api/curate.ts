@@ -1,12 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { originAllowed } from '../src/lib/serverGuard.js'
 import type { CurateRequest, CurateResponse, PlaylistLength } from '../src/lib/types.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// Hard ceiling on candidates accepted per request — protects token spend if a
-// buggy/malicious client sends the whole library instead of the pre-filtered set.
+// Hard ceilings — protect token spend from a buggy/malicious client sending
+// the whole library (or a novel) instead of the pre-filtered set.
 const MAX_ACCEPTED_CANDIDATES = 200
+const MAX_VIBE_CHARS = 300
 
 // Target track-count band per requested length. `min` is a soft floor — the model
 // is told to return fewer if fewer genuinely fit rather than padding with weak picks.
@@ -76,17 +78,26 @@ function formatCandidates(candidates: CurateRequest['candidates']): string {
 // The Haiku vibe-interpretation (when the client has one) — gives the curation
 // pass the same reading of the vibe that shaped the candidate pool.
 function formatInterpretation(interp: CurateRequest['interpretation']): string {
-  if (!interp) return ''
+  if (!interp || typeof interp !== 'object') return ''
   const parts: string[] = []
-  if (interp.summary) parts.push(`Interpretation: ${interp.summary}`)
-  if (interp.moods?.length) parts.push(`Target moods: ${interp.moods.join(', ')}`)
-  if (interp.energy) parts.push(`Target energy: ${interp.energy}`)
+  if (typeof interp.summary === 'string' && interp.summary) {
+    parts.push(`Interpretation: ${interp.summary.slice(0, 400)}`)
+  }
+  if (Array.isArray(interp.moods) && interp.moods.length) {
+    parts.push(`Target moods: ${interp.moods.filter((m) => typeof m === 'string').join(', ')}`)
+  }
+  if (typeof interp.energy === 'string' && interp.energy) {
+    parts.push(`Target energy: ${interp.energy}`)
+  }
   return parts.length ? `${parts.join('\n')}\n\n` : ''
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+  if (!originAllowed(req.headers.origin)) {
+    return res.status(403).json({ error: 'Forbidden' })
   }
 
   const body = req.body as Partial<CurateRequest>
@@ -100,8 +111,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing or empty vibe / candidates' })
   }
 
-  const { vibe } = body
-  const candidates = body.candidates.slice(0, MAX_ACCEPTED_CANDIDATES)
+  const vibe = body.vibe.trim().slice(0, MAX_VIBE_CHARS)
+  // Coerce each candidate to the exact shape the prompt builder needs — a
+  // malformed item (missing artists, non-string genre) must not 500 the request.
+  const candidates = body.candidates
+    .slice(0, MAX_ACCEPTED_CANDIDATES)
+    .filter((c) => c && typeof c.id === 'string' && typeof c.name === 'string')
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      artists: Array.isArray(c.artists) ? c.artists.filter((a) => typeof a === 'string') : [],
+      genres: Array.isArray(c.genres) ? c.genres.filter((g) => typeof g === 'string') : [],
+      year: typeof c.year === 'number' && Number.isFinite(c.year) ? c.year : 0,
+    }))
+  if (candidates.length === 0) {
+    return res.status(400).json({ error: 'No valid candidates' })
+  }
   const length: PlaylistLength =
     body.length === 'short' || body.length === 'long' ? body.length : 'medium'
 

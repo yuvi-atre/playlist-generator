@@ -472,6 +472,7 @@ function LibraryStats({
               onBlur={() => setVibeFocused(false)}
               placeholder="Describe a vibe… (e.g. Minecraft with the boys)"
               disabled={curating}
+              maxLength={200}
               className={`w-full rounded-xl border border-zinc-700 bg-zinc-900 py-4 text-base text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50 transition-all ${
                 showBot ? 'pl-12 pr-4' : 'px-4'
               }`}
@@ -527,7 +528,7 @@ function LibraryStats({
           {filtered.map((t) => (
             <li
               key={t.id}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors"
+              className="lib-row flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-900 transition-colors"
             >
               <AlbumArt url={t.albumArt} size={36} />
               <div className="min-w-0 flex-1">
@@ -1099,12 +1100,20 @@ function CurateResult({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!saving && playlistName.trim() && kept.length > 0) void handleSave()
+              }}
+            >
               <input
                 type="text"
                 value={playlistName}
                 onChange={(e) => setPlaylistName(e.target.value)}
                 disabled={saving}
+                maxLength={100}
+                aria-label="Playlist name"
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-base text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 disabled:opacity-50"
               />
               {/* Opt-in AI title: shown only while it differs from the current name. */}
@@ -1119,7 +1128,7 @@ function CurateResult({
                 </button>
               )}
               <button
-                onClick={() => void handleSave()}
+                type="submit"
                 disabled={saving || !playlistName.trim() || kept.length === 0}
                 className="w-full px-5 py-4 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-base font-semibold transition-colors"
               >
@@ -1129,7 +1138,7 @@ function CurateResult({
                     ? 'No tracks left to save'
                     : `Save to Spotify (${kept.length})`}
               </button>
-            </div>
+            </form>
           )}
         </div>
 

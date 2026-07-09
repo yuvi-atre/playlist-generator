@@ -28,6 +28,14 @@ body {
   }
 }
 
+/* Library rows: skip layout/paint for off-screen rows — the full list renders
+   (no pagination, deliberate) but only visible rows cost anything. The
+   intrinsic size matches a row's real height so the scrollbar stays stable. */
+.lib-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+}
+
 /* Slim custom scrollbar for bounded list panes. */
 .custom-scrollbar {
   scrollbar-width: thin;

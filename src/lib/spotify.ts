@@ -260,6 +260,15 @@ async function apiPost<T>(path: string, accessToken: string, body: unknown): Pro
     },
     body: JSON.stringify(body),
   })
+
+  // Same 429 backoff as apiGetUrl — playlist create/add during a rate-limit
+  // window should wait and retry, not fail the whole save.
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '2', 10)
+    await sleep(retryAfter * 1000)
+    return apiPost(path, accessToken, body)
+  }
+
   if (!res.ok) {
     const errBody = await res.text().catch(() => '(unreadable)')
     console.error(`Spotify API ${res.status} POST ${path}\n${errBody}`)

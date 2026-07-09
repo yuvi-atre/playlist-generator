@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { originAllowed } from '../src/lib/serverGuard.js'
 import type { VibeExpansion } from '../src/lib/types.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -63,11 +64,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
+  if (!originAllowed(req.headers.origin)) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   const body = req.body as { vibe?: string }
   if (typeof body.vibe !== 'string' || body.vibe.trim() === '') {
     return res.status(400).json({ error: 'Missing or empty vibe' })
   }
+  const vibe = body.vibe.trim().slice(0, 300)
 
   try {
     const message = await anthropic.messages.create({
@@ -75,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       max_tokens: 1024,
       thinking: { type: 'disabled' },
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: `Vibe: "${body.vibe.trim()}"` }],
+      messages: [{ role: 'user', content: `Vibe: "${vibe}"` }],
       output_config: { format: { type: 'json_schema', schema: EXPANSION_SCHEMA } },
     })
 

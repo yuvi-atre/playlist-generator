@@ -66,6 +66,11 @@ export function useSpotifyAuth(): SpotifyAuth {
     setError(null)
   }, [])
 
+  // Dedupe concurrent refreshes: Spotify rotates refresh tokens, so two callers
+  // refreshing in parallel (e.g. library load + profile fetch on mount) would
+  // race — the loser's now-stale refresh token 400s and force-logs the user out.
+  const refreshInFlight = useRef<Promise<SpotifyTokens> | null>(null)
+
   // Stable reference — reads from ref, so identity never changes
   const getAccessToken = useCallback(async (): Promise<string> => {
     let current = tokensRef.current ?? storage.tokens.get()
@@ -73,7 +78,12 @@ export function useSpotifyAuth(): SpotifyAuth {
 
     if (isExpired(current)) {
       try {
-        const refreshed = await refreshAccessToken(current.refreshToken)
+        const inFlight =
+          refreshInFlight.current ??
+          (refreshInFlight.current = refreshAccessToken(current.refreshToken).finally(() => {
+            refreshInFlight.current = null
+          }))
+        const refreshed = await inFlight
         storage.tokens.set(refreshed)
         setTokens(refreshed)
         tokensRef.current = refreshed

@@ -255,6 +255,22 @@ moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_
   `ugc-image-upload`** — pre-existing tokens lack it, so the upload is NON-FATAL (401/403 → subtle
   "log out and back in to enable covers" notice via `coverNotice`; other failures silent). ⚠️ Users
   must re-login ONCE to grant the scope before covers upload.
+- **Full audit pass (same session):** robustness + QoL fixes, all runtime-verified locally.
+  - `apiPost` gained the same 429 Retry-After backoff as `apiGetUrl` (playlist save no longer hard-fails
+    on a rate-limit window).
+  - **Token-refresh race fixed** (`useSpotifyAuth`): concurrent `getAccessToken()` callers now share one
+    in-flight refresh promise — Spotify rotates refresh tokens, so parallel refreshes could 400 the loser
+    and force-log the user out.
+  - **API endpoints hardened** (`src/lib/serverGuard.ts`, both `api/*.ts`): browser requests from
+    unrecognized Origins → 403 (hotlink deterrent, NOT auth — spend cap is the backstop; no-Origin
+    curl/server calls pass). Vibe capped at 300 chars server-side / 200 on the input; candidates coerced
+    to exact shape (malformed items dropped, all-invalid → 400, no more 500s from garbage);
+    `interpretation` fields type-guarded. Verified: evil origin 403s, prod/localhost origins pass,
+    all-invalid candidates 400 without an Anthropic call.
+  - **QoL:** Enter now saves (name input wrapped in a form; save button `type="submit"`); expansion
+    cache capped at 40 entries (oldest evicted); library rows use `content-visibility: auto`
+    (`.lib-row`, `contain-intrinsic-size: 52px`) so the full no-pagination list only pays for visible
+    rows; playlist-name input got `maxLength` + aria-label.
 - ⚠️ **Worktree note:** this session ran in a git worktree without `.env` — local API testing used
   `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
   `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.

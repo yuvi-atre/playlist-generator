@@ -56,6 +56,10 @@ async function fetchVibeExpansion(vibe: string): Promise<VibeExpansion | null> {
       decades: Array.isArray(data.decades) ? data.decades : [],
     }
     cache[key] = expansion
+    // Cap the cache so one-off vibes can't grow localStorage forever. Object
+    // key order is insertion order, so dropping the first keys evicts oldest.
+    const keys = Object.keys(cache)
+    for (let i = 0; i < keys.length - 40; i++) delete cache[keys[i]]
     try {
       localStorage.setItem(EXPANSION_CACHE_KEY, JSON.stringify(cache))
     } catch {
