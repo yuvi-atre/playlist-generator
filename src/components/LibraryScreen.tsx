@@ -1012,12 +1012,19 @@ function CurateResult({
   // Native share sheet on mobile (iMessage, AirDrop, …); clipboard fallback on desktop.
   async function handleShare() {
     if (!savedUrl) return
+    // Cache-bust: link-preview crawlers (iMessage/imagent especially) cache a
+    // URL's unfurl on first sight and can be slow to refresh it, so re-sharing
+    // the exact same link can surface a stale/blank preview even though the
+    // page itself is fine. A harmless, ever-changing query param makes every
+    // tap look like a new URL to the crawler — Spotify ignores it and serves
+    // the same playlist (verified: og:image is unaffected by a stray param).
+    const shareUrl = `${savedUrl}?ref=${Date.now().toString(36)}`
     if (navigator.share) {
       try {
         await navigator.share({
           title: playlistName || 'Playlist',
           text: `Check out "${playlistName}" — a playlist I curated`,
-          url: savedUrl,
+          url: shareUrl,
         })
         setShareStatus('shared')
       } catch {
@@ -1025,7 +1032,7 @@ function CurateResult({
       }
     } else {
       try {
-        await navigator.clipboard.writeText(savedUrl)
+        await navigator.clipboard.writeText(shareUrl)
         setShareStatus('copied')
       } catch {
         setSaveError('Could not copy the link — use "Open in Spotify" and copy from there.')

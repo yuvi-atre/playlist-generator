@@ -280,6 +280,16 @@ moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_
   pane is `absolute inset-0` in a stretched grid cell whose row height the left column defines, so the
   browser tracks the animated height natively every frame. Below lg unchanged (normal flow, 70vh cap).
   The left column's `lg:sticky` was removed (it was already inert — the list never exceeds the column).
+- **Share-link cache-busting (user follow-up):** the cover DID upload correctly — verified live with
+  `curl` against the user's real playlist URL: unauthenticated fetch, 200, correct og:title, og:image
+  pointing to a real 300×300 JPEG that downloads fine. The blank iMessage preview they saw was NOT an
+  app bug — it was iMessage's own link-preview cache serving a stale (pre-cover) result for a URL it
+  had already unfurled once during testing. Confirmed a stray query param doesn't affect Spotify's
+  metadata (`curl` with `?ref=...` — same og:image), so `handleShare` now appends
+  `?ref=<Date.now().toString(36)}` to the shared URL on every tap (both the native share-sheet path and
+  the clipboard fallback), making each share look like a fresh, never-cached URL to the crawler. Cheap
+  insurance — a genuinely brand-new playlist's URL was never going to hit this anyway (never sent
+  before = no stale cache to bust), but it fully closes the re-share edge case for free.
 - ⚠️ **Worktree note:** this session ran in a git worktree without `.env` — local API testing used
   `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
   `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.
