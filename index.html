@@ -13,6 +13,14 @@
     <meta name="robots" content="index, follow" />
     <meta name="theme-color" content="#0a0a0a" />
 
+    <!-- Warm up connections to every external origin the app talks to:
+         auth handshake, library fetch, album art, and Last.fm genre tags.
+         Saves a DNS+TLS round trip each on first use. -->
+    <link rel="preconnect" href="https://accounts.spotify.com" />
+    <link rel="preconnect" href="https://api.spotify.com" />
+    <link rel="preconnect" href="https://i.scdn.co" crossorigin />
+    <link rel="preconnect" href="https://ws.audioscrobbler.com" />
+
     <!-- Open Graph / social share -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Playlist Generator — vibe-curated from your liked songs" />

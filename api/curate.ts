@@ -23,6 +23,7 @@ function buildSystemPrompt(length: PlaylistLength): string {
   return `You are an expert music curator building a playlist from a person's own liked songs. You receive a vibe prompt (sometimes with an interpretation of it) and a list of candidate tracks pre-filtered from their library. Select and order the tracks that authentically fit the vibe.
 
 Selection principles:
+- Candidates are listed roughly in order of relevance — the pre-filter ranked earlier entries as stronger matches for the vibe. Weigh the top of the list accordingly, but use your judgment on every track.
 - Aim for about ${aim} tracks (${min}–${max}). Quality over quantity: if fewer than ${aim} candidates genuinely fit, return fewer — DO NOT pad with weak picks. Never exceed ${max}.
 - Fit the vibe's mood and energy, not just its genre. A genre-matched track with the wrong mood is a bad pick.
 - Cohesion over popularity: the playlist should feel like one deliberate session, not a grab-bag of hits.

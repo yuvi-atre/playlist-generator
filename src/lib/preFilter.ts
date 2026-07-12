@@ -8,14 +8,29 @@ export const SHORTLIST_SIZE = 300
 const INCLUDE_ARTIST_BOOST = 8 // #1 adaptive cap: rank an explicitly-included artist's tracks high
 
 // ── Scoring knobs (tune these) ────────────────────────────────────────────────
-const GENRE_MATCH_SCORE = 3 // per matching genre string…
+// STRONG keywords = raw vibe tokens + Haiku-expansion genres (the interpretation
+// of the WHOLE vibe). WEAK keywords = the fixed VIBE_TO_GENRES dictionary, which
+// maps single context words ("night" → pop/hip hop/indie/…) and used to score
+// equal to real intent — measured on a labeled eval library, that dilution left
+// "anime night" with 1 on-vibe track in the top-50 candidates. When expansion is
+// unavailable the dictionary is promoted back to strong (sole-signal fallback).
+const GENRE_MATCH_SCORE = 3 // per STRONG-matching genre string…
 const MAX_GENRE_MATCHES = 3 // …counted at most this many times (#3: cap runaway genre score)
+const WEAK_GENRE_SCORE = 1 // per WEAK (dictionary context) match…
+const MAX_WEAK_MATCHES = 2 // …so context hints tiebreak, never outrank intent
 const AVOID_GENRE_PENALTY = 4 // vibe-expansion says this genre clashes with the vibe
 const ERA_SCORE = 2
 const NAME_MATCH_SCORE = 1 // vibe token appears in the track title
 const POPULARITY_WEIGHT = 1 // soft tiebreak: popularity (0–100) → up to +1 (#3: less mainstream bias)
 const VARIETY_WEIGHT = 0.6 // per-(vibe,track) jitter so ties vary by prompt (#3)
 const MAX_PER_ARTIST = 3 // #4: at most N tracks per primary artist in the candidate set
+// A track is "on-vibe" if its signal includes ≥1 strong genre match (or era+name).
+// The candidate list is built from on-vibe tracks first — including DEEPER cuts
+// of matching artists — and only tops up with no-signal popular tracks to reach
+// this floor. Previously the list always padded to 150 with zero-signal tracks,
+// handing Claude a mostly off-vibe pool it then "curated" from.
+const STRONG_SIGNAL_MIN = GENRE_MATCH_SCORE
+const MIN_CANDIDATE_POOL = 60
 
 // Deterministic [0,1) hash (FNV-1a) — stable for a given (vibe, track) so results
 // are reproducible per prompt but differ across prompts.
@@ -169,7 +184,8 @@ function tokenize(text: string): string[] {
 function scoreTrack(
   track: Track,
   vibeTokens: string[],
-  genreKeywords: Set<string>,
+  strongKeywords: Set<string>,
+  weakKeywords: Set<string>,
   avoidKeywords: Set<string>,
   eraRanges: Array<[number, number]>
 ): number {
@@ -181,16 +197,28 @@ function scoreTrack(
 
   // Genre match — primary signal. Count each genre string at most once, and cap the
   // number of counted matches so a heavily-tagged track can't swamp a perfect single-tag one.
-  let genreMatches = 0
+  // A genre string that matches both tiers counts only as strong.
+  let strongMatches = 0
+  let weakMatches = 0
   for (const g of canonGenres) {
-    for (const kw of genreKeywords) {
+    let matched = false
+    for (const kw of strongKeywords) {
       if (g.includes(kw)) {
-        genreMatches++
+        strongMatches++
+        matched = true
+        break
+      }
+    }
+    if (matched) continue
+    for (const kw of weakKeywords) {
+      if (g.includes(kw)) {
+        weakMatches++
         break
       }
     }
   }
-  s += Math.min(genreMatches, MAX_GENRE_MATCHES) * GENRE_MATCH_SCORE
+  s += Math.min(strongMatches, MAX_GENRE_MATCHES) * GENRE_MATCH_SCORE
+  s += Math.min(weakMatches, MAX_WEAK_MATCHES) * WEAK_GENRE_SCORE
 
   // Clash penalty — the vibe expansion flagged these genres as fighting the vibe
   // (e.g. death metal on a sleep playlist). Soft: one penalty, not a hard drop,
@@ -304,12 +332,17 @@ export function preFilter(
 
   const vibeTokens = tokenize(vibe)
 
-  // Expand vibe tokens to genre substrings to match against track genres
-  const genreKeywords = new Set<string>()
+  // STRONG tier: raw vibe tokens (someone typing "shoegaze" means shoegaze) plus
+  // the Haiku expansion's genres — the interpretation of the whole vibe.
+  // WEAK tier: the per-token dictionary's context mappings. When expansion is
+  // missing (endpoint down, cache cold), the dictionary is promoted to strong so
+  // off-dictionary behavior degrades to the old single-tier scoring.
+  const strongKeywords = new Set<string>(vibeTokens)
+  const weakKeywords = new Set<string>()
+  const hasExpansionGenres = Boolean(expansion && expansion.genres.length > 0)
   for (const token of vibeTokens) {
     const mapped = VIBE_TO_GENRES[token]
-    if (mapped) mapped.forEach((kw) => genreKeywords.add(kw))
-    genreKeywords.add(token)
+    if (mapped) mapped.forEach((kw) => (hasExpansionGenres ? weakKeywords : strongKeywords).add(kw))
   }
 
   // Detect era year ranges from the raw vibe string
@@ -318,17 +351,16 @@ export function preFilter(
     if (pattern.test(vibe)) eraRanges.push(range)
   }
 
-  // Haiku vibe-expansion (optional): augment the fixed keyword map so off-dictionary
-  // vibes still get a genre/era signal. Treated as soft signals, same as the built-in
-  // ones. Keywords are canonicalized so they land on the same vocabulary as track tags.
+  // Haiku vibe-expansion (optional). Keywords are canonicalized so they land on
+  // the same vocabulary as (canonicalized) track tags.
   const avoidKeywords = new Set<string>()
   if (expansion) {
     for (const g of expansion.genres) {
       const kw = g.toLowerCase().trim()
       if (!kw) continue
-      genreKeywords.add(kw)
+      strongKeywords.add(kw)
       const canon = canonicalizeGenre(kw)
-      if (canon) genreKeywords.add(canon)
+      if (canon) strongKeywords.add(canon)
     }
     for (const g of expansion.avoidGenres) {
       const kw = g.toLowerCase().trim()
@@ -339,8 +371,13 @@ export function preFilter(
       if (Number.isFinite(start)) eraRanges.push([start, start + 9])
     }
   }
-  // A genre can't be both wanted and avoided — wanted wins.
-  for (const kw of genreKeywords) avoidKeywords.delete(kw)
+  // A genre can't be both wanted and avoided — wanted wins. Weak hints also
+  // shouldn't fight the strong tier or the avoid list.
+  for (const kw of strongKeywords) {
+    avoidKeywords.delete(kw)
+    weakKeywords.delete(kw)
+  }
+  for (const kw of avoidKeywords) weakKeywords.delete(kw)
 
   const includeArtists = f?.includeArtists ?? []
 
@@ -365,7 +402,14 @@ export function preFilter(
     artistsMatchAny(track, includeArtists)
 
   const scored = pool.map((track) => {
-    const signal = scoreTrack(track, vibeTokens, genreKeywords, avoidKeywords, eraRanges)
+    const signal = scoreTrack(
+      track,
+      vibeTokens,
+      strongKeywords,
+      weakKeywords,
+      avoidKeywords,
+      eraRanges
+    )
     // Blend a soft popularity nudge (≤ +1) and per-vibe variety jitter (≤ VARIETY_WEIGHT)
     // into the score. Both are smaller than one genre match, so real signal always wins;
     // they only reorder tracks the signal ranks equally (esp. the zero-score long tail).
@@ -373,22 +417,29 @@ export function preFilter(
     const variety = hashUnit(`${vibe}|${track.id}`) * VARIETY_WEIGHT
     // #1 adaptive cap: artists explicitly included OR named in the vibe are the
     // point of the playlist — boost them.
-    const boost = isBoosted(track) ? INCLUDE_ARTIST_BOOST : 0
-    return { track, score: signal + popularity + variety + boost }
+    const boosted = isBoosted(track)
+    const boost = boosted ? INCLUDE_ARTIST_BOOST : 0
+    return { track, boosted, signal, score: signal + popularity + variety + boost }
   })
 
   scored.sort((a, b) => b.score - a.score)
 
-  // #4: cap tracks per primary artist so a few prolific artists can't dominate the set.
-  // Overflow (tracks past the cap) backfills only if the capped pass comes up short
-  // (small or artist-heavy libraries), so we still return a full candidate set.
+  // On-vibe pool first: tracks with a real signal (≥1 strong genre match, or a
+  // boosted artist). Weak/no-signal tracks only TOP UP to the floor — they never
+  // crowd out on-vibe depth, and a clean pool beats a padded one for the LLM.
+  const onVibe = scored.filter((s) => s.boosted || s.signal >= STRONG_SIGNAL_MIN)
+  const filler = scored.filter((s) => !(s.boosted || s.signal >= STRONG_SIGNAL_MIN))
+
+  // #4: cap tracks per primary artist so a few prolific artists can't dominate
+  // the head of the set. Overflow (deeper cuts of on-vibe artists) follows the
+  // capped picks — still on-vibe, so it beats any filler.
   const perArtist = new Map<string, number>()
   const picked: Track[] = []
   const overflow: Track[] = []
-  for (const { track } of scored) {
+  for (const { track, boosted } of onVibe) {
     // #1 adaptive cap: when an artist is explicitly included OR named in the
     // vibe, go deep on them — exempt their tracks from the per-artist diversity cap.
-    if (isBoosted(track)) {
+    if (boosted) {
       picked.push(track)
       continue
     }
@@ -402,14 +453,20 @@ export function preFilter(
     }
   }
 
-  return picked
-    .concat(overflow)
-    .slice(0, limit)
-    .map((track) => ({
-      id: track.id,
-      name: track.name,
-      artists: track.artists,
-      genres: track.genres,
-      year: track.year,
-    }))
+  const result = picked.concat(overflow)
+  // Vague vibes (little/no genre signal) still need a workable pool — top up
+  // with the best remaining tracks (weak hints, then popularity/jitter order).
+  const floor = Math.min(Math.max(MIN_CANDIDATE_POOL, result.length), limit)
+  for (const { track } of filler) {
+    if (result.length >= floor) break
+    result.push(track)
+  }
+
+  return result.slice(0, limit).map((track) => ({
+    id: track.id,
+    name: track.name,
+    artists: track.artists,
+    genres: track.genres,
+    year: track.year,
+  }))
 }

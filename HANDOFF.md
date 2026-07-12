@@ -290,6 +290,26 @@ moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_
   the clipboard fallback), making each share look like a fresh, never-cached URL to the crawler. Cheap
   insurance — a genuinely brand-new playlist's URL was never going to hit this anyway (never sent
   before = no stale cache to bust), but it fully closes the re-share edge case for free.
+- **Curation quality v3 (user report: "some of the curation is not great") — MEASURED this time.**
+  Built a labeled-cluster eval library (`eval.ts` + `regression.ts` in the session scratchpad — worth
+  re-creating as a checked-in test someday) and measured candidate-pool precision@50. Baseline was
+  damning: **"anime night" → 2%** (ONE j-pop track in the top 50 sent to Claude; pool flooded with
+  pop/hip hop). Three compounding causes, all in `preFilter.ts`:
+  1. The VIBE_TO_GENRES dictionary's context words ("night" → pop/hip hop/r&b/indie) scored EQUAL to
+     the Haiku expansion's real intent, then popularity tie-broke toward Top-40. **Fix: two-tier
+     keywords** — STRONG (raw tokens + expansion genres, 3/match cap 3) vs WEAK (dictionary, 1/match
+     cap 2). Dictionary is promoted back to strong when expansion is null (fallback preserved, R5).
+  2. The list always padded to 150 with zero-signal popular tracks. **Fix: on-vibe-first assembly** —
+     tracks with ≥1 strong genre match (or boosted artist) fill the pool first, INCLUDING deeper cuts
+     of matching artists past the per-artist cap; filler only tops up to `MIN_CANDIDATE_POOL = 60`.
+     Smaller, cleaner pool → also cheaper Sonnet calls and fewer Last.fm enrichments.
+  3. Prompt now tells Sonnet candidates are relevance-ordered (head of list = strongest matches).
+     **Results:** anime night 2%→80% (40/50 j-pop), late-night drive 24%→72%, study 24%→48% (=100% recall,
+     cluster exhausted), gym 74%→78%, sad country 18%→36% (=100% recall). Six-case regression suite passes
+     (artist flood, named-artist depth, avoid-genres, canonicalization, dictionary fallback, vague-vibe floor).
+- **Site perf:** preconnect hints in `index.html` for accounts.spotify.com / api.spotify.com / i.scdn.co
+  (crossorigin, canvas mosaic) / ws.audioscrobbler.com. Bundle already lean (~105 KB gz); skipped
+  code-splitting as low-value.
 - ⚠️ **Worktree note:** this session ran in a git worktree without `.env` — local API testing used
   `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
   `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.
