@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Playlist Generator — demo title cards</title>
+    <!--
+      Screen-record these full-screen (Cmd+Shift+5) and cut them into the demo:
+        · Card 1 (intro, ~4s of capture) plays automatically on load
+        · Press SPACE (or click) to switch to Card 2 (outro)
+        · Press R to replay the current card's animation
+      Open in a 16:9 browser window; hide the bookmarks bar (Cmd+Shift+B).
+    -->
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        background: #0a0a0a;
+        color: #f5f5f5;
+        font-family: system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+        cursor: none;
+      }
+      .glow {
+        position: fixed; inset: 0;
+        background: radial-gradient(ellipse at 50% 60%, rgba(34, 197, 94, 0.10), transparent 60%);
+      }
+      .card {
+        position: fixed; inset: 0;
+        display: none;
+        flex-direction: column; align-items: center; justify-content: center;
+        gap: 2.2rem; text-align: center; padding: 4rem;
+      }
+      .card.on { display: flex; }
+
+      /* Equalizer */
+      .eq { display: flex; align-items: flex-end; gap: 10px; height: 84px; }
+      .eq div {
+        width: 14px; border-radius: 999px; background: #22c55e;
+        transform-origin: center bottom;
+        animation: eq 1.1s ease-in-out infinite;
+      }
+      .eq div:nth-child(1) { height: 38px; animation-delay: -0.00s; }
+      .eq div:nth-child(2) { height: 72px; animation-delay: -0.30s; }
+      .eq div:nth-child(3) { height: 52px; animation-delay: -0.60s; }
+      .eq div:nth-child(4) { height: 84px; animation-delay: -0.90s; }
+      .eq div:nth-child(5) { height: 46px; animation-delay: -1.20s; }
+      @keyframes eq { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+
+      h1 { font-size: 4.5rem; font-weight: 650; letter-spacing: -0.02em; }
+      .tag { font-size: 1.6rem; color: #a1a1aa; font-weight: 400; }
+      .tag b { color: #22c55e; font-weight: 600; }
+
+      /* Fake vibe input with typewriter */
+      .pill {
+        display: flex; align-items: center; gap: 0.9rem;
+        border: 1px solid #3f3f46; background: #18181b; border-radius: 1rem;
+        padding: 1.4rem 2rem; font-size: 1.7rem; color: #fff; min-width: 34rem;
+        text-align: left;
+      }
+      .pill .bot { width: 2rem; height: 2rem; }
+      #typed::after {
+        content: ''; display: inline-block; width: 2px; height: 1.6rem;
+        background: #22c55e; margin-left: 3px; vertical-align: -0.2rem;
+        animation: blink 0.9s step-end infinite;
+      }
+      @keyframes blink { 50% { opacity: 0; } }
+
+      /* Outro */
+      .big { font-size: 5rem; font-weight: 700; letter-spacing: -0.02em; }
+      .cta { font-size: 2rem; color: #e4e4e7; }
+      .cta code {
+        background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.5);
+        color: #4ade80; border-radius: 0.6rem; padding: 0.15em 0.5em;
+        font-family: inherit; font-weight: 600;
+      }
+      .fine { font-size: 1.1rem; color: #71717a; }
+
+      /* Entrance animation, re-triggerable */
+      .rise { opacity: 0; transform: translateY(22px); }
+      .play .rise { animation: rise 0.6s cubic-bezier(0.165, 0.84, 0.44, 1) forwards; }
+      .play .rise:nth-child(2) { animation-delay: 0.15s; }
+      .play .rise:nth-child(3) { animation-delay: 0.30s; }
+      .play .rise:nth-child(4) { animation-delay: 0.45s; }
+      @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+
+      #hint {
+        position: fixed; right: 1rem; bottom: 1rem; font-size: 0.8rem; color: #3f3f46;
+        transition: opacity 0.5s; cursor: default;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+
+    <section id="intro" class="card on">
+      <div class="eq rise"><div></div><div></div><div></div><div></div><div></div></div>
+      <h1 class="rise">Playlist Generator</h1>
+      <p class="tag rise">type a vibe → get a <b>real Spotify playlist</b> from your liked songs</p>
+      <div class="pill rise">
+        <svg class="bot" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4" y="7" width="16" height="12" rx="4" fill="#18181b" stroke="#22c55e" stroke-width="1.6"/>
+          <circle cx="9.5" cy="13" r="1.4" fill="#22c55e"/><circle cx="14.5" cy="13" r="1.4" fill="#22c55e"/>
+          <line x1="12" y1="7" x2="12" y2="4" stroke="#22c55e" stroke-width="1.6"/><circle cx="12" cy="3.4" r="1.2" fill="#22c55e"/>
+        </svg>
+        <span id="typed"></span>
+      </div>
+    </section>
+
+    <section id="outro" class="card">
+      <div class="eq rise"><div></div><div></div><div></div><div></div><div></div></div>
+      <p class="big rise">want in?</p>
+      <p class="cta rise">comment <code>vibe</code> — I’ll DM you a beta slot</p>
+      <p class="fine rise">5 slots to start (Spotify’s cap, not mine) · built with React + Claude</p>
+    </section>
+
+    <p id="hint">SPACE next card · R replay · H hide this</p>
+
+    <script>
+      const cards = [document.getElementById('intro'), document.getElementById('outro')]
+      let i = 0
+      const VIBE = 'anime night'
+
+      function play(card) {
+        card.classList.remove('play')
+        void card.offsetWidth // restart CSS animations
+        card.classList.add('play')
+        if (card.id === 'intro') typewrite()
+      }
+      let typeTimer = null
+      function typewrite() {
+        clearInterval(typeTimer)
+        const el = document.getElementById('typed')
+        el.textContent = ''
+        let n = 0
+        typeTimer = setInterval(() => {
+          el.textContent = VIBE.slice(0, ++n)
+          if (n >= VIBE.length) clearInterval(typeTimer)
+        }, 110)
+      }
+      function show(idx) {
+        i = idx
+        cards.forEach((c, k) => c.classList.toggle('on', k === i))
+        play(cards[i])
+      }
+      addEventListener('keydown', (e) => {
+        if (e.code === 'Space') show((i + 1) % cards.length)
+        if (e.key === 'r' || e.key === 'R') play(cards[i])
+        if (e.key === 'h' || e.key === 'H') document.getElementById('hint').style.opacity = '0'
+      })
+      addEventListener('click', () => show((i + 1) % cards.length))
+      show(0)
+    </script>
+  </body>
+</html>
