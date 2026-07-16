@@ -84,7 +84,8 @@ export function WaitlistForm() {
   if (status === 'done') {
     return (
       <p className="max-w-xs text-center text-sm text-zinc-400">
-        You’re on the list 🎧 I’ll reach out when a slot opens up.
+        You’re on the list 🎧 I’ll reach out when a slot opens — just make sure that was the email
+        your <span className="text-zinc-300">Spotify login</span> uses.
       </p>
     )
   }
@@ -94,16 +95,17 @@ export function WaitlistForm() {
       <p className="text-center text-xs leading-relaxed text-zinc-500">
         Beta is capped at 5 Spotify accounts (their rule) — slots rotate.
         <br />
-        Drop your email and I’ll DM you when one opens.
+        Drop the <span className="text-zinc-300">email your Spotify account uses</span> — that’s the
+        one their allowlist needs.
       </p>
       <div className="flex gap-2">
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
+          placeholder="email on your Spotify account"
           disabled={status === 'sending'}
-          aria-label="Email for the beta waitlist"
+          aria-label="The email address your Spotify account uses"
           className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-50"
         />
         <button
@@ -114,6 +116,9 @@ export function WaitlistForm() {
           {status === 'sending' ? 'Joining…' : 'Join waitlist'}
         </button>
       </div>
+      <p className="text-center text-[11px] leading-relaxed text-zinc-600">
+        Used only to add you to the Spotify beta allowlist — never shared.
+      </p>
       {message && <p className="text-center text-xs text-red-400">{message}</p>}
     </form>
   )
