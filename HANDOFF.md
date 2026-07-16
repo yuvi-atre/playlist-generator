@@ -314,6 +314,33 @@ moods, energy, decades }`. `avoidGenres` scores as a soft penalty (`AVOID_GENRE_
   `npx tsx --env-file="<main repo>/.env" scripts/dev-api.ts` with `API_PORT=3111`. Also killed a STALE
   `dev:api` that was squatting port 3001 with pre-expand-vibe code — restart `npm run dev:api` fresh.
 
+## Session 2026-07-16 — post-launch: waitlist + demo-mode prep + discovery spec
+
+LinkedIn launch landed well; demand exceeds the 5-user Spotify dev-mode cap. User confirmed the
+**250k-MAU requirement kills Extended Quota Mode** for this app — strategy inverted: demo mode becomes
+the public tier; the 5 rotating slots are the "full experience" tier. BYO-client-ID noted as the
+long-term escape hatch (user creates their own Spotify app → no allowlist), deferred.
+
+- **Beta waitlist (BUILT, deployed):** `api/waitlist.ts` — POST `{ email }` → Discord webhook message
+  (push notification = signup notice + timestamp = rotation record). Email regex + 254 cap, honeypot
+  field (`website`) returns fake 200, `@` stripped from the echoed email so crafted input can't ping
+  the channel, origin-guarded like the other endpoints. Returns **503 "not open yet" until
+  `DISCORD_WEBHOOK_URL` is set in Vercel env** (create: Discord server → Integrations → Webhooks →
+  copy URL → `npx vercel env add DISCORD_WEBHOOK_URL production` → redeploy; add to local `.env` too).
+  `WaitlistForm` on the login screen (email input + join button + success/error states).
+  All four paths runtime-verified locally (400 bad email / 200 honeypot / 503 unset / 403 origin).
+- **Demo mode (AGREED, blocked on data):** user approved using THEIR library as demo data pending an
+  audit. They export via a console snippet (`localStorage.getItem('pg_library_v3')` → download) and
+  hand over the JSON; then: profanity/NSFW scan + human-review shortlist, strip `addedAt`, trim to a
+  few hundred tracks → `public/demo-library.json`; "Try the demo" on the login screen loads it sans
+  OAuth; curation works fully (never touches Spotify); Save becomes a waitlist CTA. NOT started.
+- **Discovery mode (SPEC'D, do not build yet):** `docs/discovery-spec.md` — propose-by-Claude,
+  verify-by-Spotify-Search design (recommendations endpoints 403, search works). Toggle in Filters,
+  ~20% NEW-badged tracks, +0.5–1¢/playlist. Open decisions listed in the spec.
+- **Promo card typewriter** updated "anime night" → "sunday morning coffee" (the chosen demo vibe).
+- **Cost baseline (from user's Console dashboard):** $1.59 total to date ≈ 2–2.5¢/playlist. Advice
+  given: buy $20–25 credits, keep spend cap ~$20; intro pricing ends 2026-08-31 (→ ~3–4¢/playlist).
+
 ## Next step (older open ideas, none started)
 
 - **Search filtering #3 + #4** — DONE (`preFilter.ts`, knobs are named constants). Live `111fdbd`.

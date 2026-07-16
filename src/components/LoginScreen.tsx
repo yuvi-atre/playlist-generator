@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { RobotHero } from './RobotMascot'
 import type { AppError } from '../lib/types'
 
@@ -30,7 +31,80 @@ export function LoginScreen({ onLogin, loading, error }: Props) {
       </button>
 
       {error && <p className="text-red-400 text-sm text-center max-w-xs">{error.message}</p>}
+
+      <WaitlistForm />
     </div>
+  )
+}
+
+// Spotify's dev-mode allowlist caps the beta at 5 testers, so login only works
+// for allowlisted accounts. Everyone else lands here: signups fire a Discord
+// webhook (see api/waitlist.ts) and slots rotate manually in the dashboard.
+function WaitlistForm() {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+  const [message, setMessage] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const value = email.trim()
+    if (!value || status === 'sending') return
+    setStatus('sending')
+    setMessage(null)
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: value }),
+      })
+      if (res.ok) {
+        setStatus('done')
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        setMessage(body.error ?? 'Something went wrong — try again.')
+        setStatus('error')
+      }
+    } catch {
+      setMessage('Network error — try again.')
+      setStatus('error')
+    }
+  }
+
+  if (status === 'done') {
+    return (
+      <p className="max-w-xs text-center text-sm text-zinc-400">
+        You’re on the list 🎧 I’ll reach out when a slot opens up.
+      </p>
+    )
+  }
+
+  return (
+    <form onSubmit={(e) => void submit(e)} className="flex w-full max-w-xs flex-col gap-2">
+      <p className="text-center text-xs leading-relaxed text-zinc-500">
+        Beta is capped at 5 Spotify accounts (their rule) — slots rotate.
+        <br />
+        Drop your email and I’ll DM you when one opens.
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          disabled={status === 'sending'}
+          aria-label="Email for the beta waitlist"
+          className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={status === 'sending' || !email.trim()}
+          className="shrink-0 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {status === 'sending' ? 'Joining…' : 'Join waitlist'}
+        </button>
+      </div>
+      {message && <p className="text-center text-xs text-red-400">{message}</p>}
+    </form>
   )
 }
 

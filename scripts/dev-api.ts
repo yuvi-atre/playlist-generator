@@ -6,6 +6,7 @@ const PORT = Number(process.env.API_PORT) || 3001
 const ROUTES: Record<string, string> = {
   '/api/curate': '../api/curate.ts',
   '/api/expand-vibe': '../api/expand-vibe.ts',
+  '/api/waitlist': '../api/waitlist.ts',
 }
 
 const server = http.createServer(async (req, res) => {
