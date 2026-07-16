@@ -141,12 +141,24 @@ export function useCurate(library: Track[]): CurateState {
           return
         }
 
-        // Enrich the shortlist with Last.fm genres (non-fatal if it fails)
+        // Enrich the shortlist with Last.fm genres (non-fatal if it fails).
+        // Only artists whose tracks still LACK genres are fetched — zero calls
+        // when the library is pre-enriched (demo snapshot, warm caches).
         setPhase('enriching')
-        const uniqueArtists = [...new Set(shortlist.map((c) => c.artists[0]).filter(Boolean))]
-        const genreMap = await fetchArtistGenres(uniqueArtists, LASTFM_API_KEY).catch(
-          () => new Map<string, string[]>()
-        )
+        const missingArtists = [
+          ...new Set(
+            shortlist
+              .filter((c) => c.genres.length === 0)
+              .map((c) => c.artists[0])
+              .filter(Boolean)
+          ),
+        ]
+        const genreMap =
+          missingArtists.length > 0
+            ? await fetchArtistGenres(missingArtists, LASTFM_API_KEY).catch(
+                () => new Map<string, string[]>()
+              )
+            : new Map<string, string[]>()
         const trackById = new Map(library.map((t) => [t.id, t]))
         const enrichedPool: Track[] = shortlist.flatMap((c) => {
           const t = trackById.get(c.id)

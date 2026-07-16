@@ -334,6 +334,25 @@ long-term escape hatch (user creates their own Spotify app → no allowlist), de
   hand over the JSON; then: profanity/NSFW scan + human-review shortlist, strip `addedAt`, trim to a
   few hundred tracks → `public/demo-library.json`; "Try the demo" on the login screen loads it sans
   OAuth; curation works fully (never touches Spotify); Save becomes a waitlist CTA. NOT started.
+- **Demo mode (BUILT, deployed):** the public tier — full curation, zero Spotify auth.
+  - **Data:** `public/demo-library.json` (242 KB raw, ~55 KB gz) built from the user's real 813-track
+    snapshot via a scratchpad script run with `--env-file` (the Last.fm key stayed in env, never read).
+    Genres BAKED IN per primary artist (97% coverage, top-5 Last.fm tags), `addedAt` stripped (listening
+    -history dates), `album` names dropped, `albumArtLarge` nulled (no cover upload in demo),
+    `popularity: 0`. In `.prettierignore` (formatting would pretty-print 242 KB). Content AUDIT run:
+    5 hard + 19 soft flags, all mainstream chart songs — user approved shipping as-is. To remove a
+    track later: filter the JSON and redeploy.
+  - **Flow:** LoginScreen "or try the demo — no account needed" → `DemoScreen.tsx` fetches the JSON and
+    shapes it as a `LibraryState` → `LibraryScreen demoMode`: DEMO badge in header, "Exit demo",
+    refresh hidden ("A real library snapshot…" caption), libGenres seeded from baked genres (ZERO
+    Last.fm calls per demo user), and CurateResult swaps Save-to-Spotify for a **WaitlistForm CTA**
+    ("Like this playlist? Saving it needs a beta slot") — pitch lands at max-want moment.
+  - **Freebie for everyone:** `useCurate` now fetches Last.fm only for shortlist artists whose tracks
+    LACK genres — zero calls in demo, fewer for warm real users.
+  - ⚠️ **NOTE (real-app finding):** the user's fresh v3 snapshot had NO `popularity` field on any track
+    — Spotify's Feb-2026 `/me/tracks` payload apparently stopped including it (undefined → dropped by
+    JSON.stringify). Harmless (`track.popularity || 0` guards), but the popularity tiebreak in
+    preFilter is currently inert for everyone.
 - **Discovery mode (SPEC'D, do not build yet):** `docs/discovery-spec.md` — propose-by-Claude,
   verify-by-Spotify-Search design (recommendations endpoints 403, search works). Toggle in Filters,
   ~20% NEW-badged tracks, +0.5–1¢/playlist. Open decisions listed in the spec.

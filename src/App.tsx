@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { CallbackHandler } from './components/CallbackHandler'
+import { DemoScreen } from './components/DemoScreen'
 import { LibraryScreen } from './components/LibraryScreen'
 import { LoginScreen } from './components/LoginScreen'
 import { useLibrary } from './hooks/useLibrary'
@@ -18,6 +19,8 @@ function AuthenticatedApp() {
   const auth = useSpotifyAuth()
   const library = useLibrary(auth.getAccessToken)
   const { load } = library // stable identity (useCallback) — safe as the sole effect dep
+  // Demo mode: full curation on a bundled sample library, no Spotify account.
+  const [demo, setDemo] = useState(false)
 
   // Auto-load library once authenticated
   useEffect(() => {
@@ -27,7 +30,15 @@ function AuthenticatedApp() {
   }, [auth.tokens, load])
 
   if (!auth.tokens) {
-    return <LoginScreen onLogin={auth.login} loading={auth.loading} error={auth.error} />
+    if (demo) return <DemoScreen onExit={() => setDemo(false)} />
+    return (
+      <LoginScreen
+        onLogin={auth.login}
+        onTryDemo={() => setDemo(true)}
+        loading={auth.loading}
+        error={auth.error}
+      />
+    )
   }
 
   return (

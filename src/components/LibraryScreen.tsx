@@ -15,6 +15,7 @@ import { canonicalizeGenres } from '../lib/genres'
 import type { LibraryState } from '../hooks/useLibrary'
 import { addTracksToPlaylist, createPlaylist, uploadPlaylistCover } from '../lib/spotify'
 import { generatePlaylistCover } from '../lib/cover'
+import { WaitlistForm } from './LoginScreen'
 import { DEFAULT_FILTERS } from '../lib/types'
 import type {
   AppError,
@@ -30,9 +31,18 @@ interface Props {
   library: LibraryState
   getAccessToken: () => Promise<string>
   onLogout: () => void
+  // Demo mode: static sample library, no Spotify account. Hides refresh,
+  // swaps Save-to-Spotify for a waitlist CTA, and relabels logout.
+  demoMode?: boolean
 }
 
-export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props) {
+export function LibraryScreen({
+  user,
+  library,
+  getAccessToken,
+  onLogout,
+  demoMode = false,
+}: Props) {
   const { tracks, fetchedAt, loading, progress, error } = library
   // Show the hero landing first; the prompt view is revealed on "Get Started".
   const [started, setStarted] = useState(false)
@@ -41,9 +51,19 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
 
   // Genres come from Last.fm (Spotify /v1/artists 403s). Enrich the full library in the
   // BACKGROUND after the list has rendered — never blocks the UI; cached in localStorage.
+  // Demo library ships with genres BAKED IN, so demo sessions do zero Last.fm calls.
   const [libGenres, setLibGenres] = useState<Map<string, string[]>>(new Map())
   useEffect(() => {
     if (!tracks.length) return
+    if (demoMode) {
+      const baked = new Map<string, string[]>()
+      for (const t of tracks) {
+        const artist = t.artists[0]
+        if (artist && !baked.has(artist)) baked.set(artist, t.genres)
+      }
+      setLibGenres(baked)
+      return
+    }
     let cancelled = false
     const artists = [...new Set(tracks.map((t) => t.artists[0]).filter(Boolean))]
     void fetchArtistGenres(artists, LASTFM_API_KEY)
@@ -54,7 +74,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
     return () => {
       cancelled = true
     }
-  }, [tracks])
+  }, [tracks, demoMode])
   // How many artists a genre must tag to count as "real" — drops the long tail of
   // one-off tags (stray artist names, memes, typos) that Last.fm leaves behind.
   const MIN_GENRE_ARTISTS = 2
@@ -112,6 +132,11 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
         <span className="flex items-center gap-2 font-semibold text-white text-sm">
           <img src="/favicon.svg" alt="" aria-hidden="true" className="w-5 h-5" />
           Playlist Generator
+          {demoMode && (
+            <span className="rounded-full border border-green-600/60 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
+              Demo
+            </span>
+          )}
         </span>
         <div className="flex items-center gap-4">
           {user && <span className="text-zinc-400 text-sm">{user.displayName}</span>}
@@ -119,7 +144,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             onClick={onLogout}
             className="text-zinc-500 hover:text-white text-sm transition-colors"
           >
-            Log out
+            {demoMode ? 'Exit demo' : 'Log out'}
           </button>
         </div>
       </header>
@@ -142,6 +167,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             genresByTrack={curate.genresByTrack}
             getAccessToken={getAccessToken}
             onReset={curate.reset}
+            demoMode={demoMode}
           />
         ) : !started ? (
           <GetStartedHero trackCount={tracks.length} onStart={() => setStarted(true)} />
@@ -159,6 +185,7 @@ export function LibraryScreen({ user, library, getAccessToken, onLogout }: Props
             genreOptions={genreOptions}
             artistOptions={artistOptions}
             onCurate={(vibe, filters) => void curate.curate(vibe, filters)}
+            demoMode={demoMode}
           />
         )}
       </main>
@@ -360,6 +387,7 @@ function LibraryStats({
   genreOptions,
   artistOptions,
   onCurate,
+  demoMode,
 }: {
   tracks: Track[]
   trackCount: number
@@ -373,6 +401,7 @@ function LibraryStats({
   genreOptions: string[]
   artistOptions: string[]
   onCurate: (vibe: string, filters: CurateFilters) => void
+  demoMode: boolean
 }) {
   const [vibe, setVibe] = useState('')
   const [vibeFocused, setVibeFocused] = useState(false)
@@ -415,7 +444,9 @@ function LibraryStats({
       {/* LEFT: library info + vibe prompt — defines the row height on desktop */}
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 text-center lg:text-left">
-          <h2 className="text-2xl font-semibold text-white">Your library is ready</h2>
+          <h2 className="text-2xl font-semibold text-white">
+            {demoMode ? 'The demo library is ready' : 'Your library is ready'}
+          </h2>
 
           <div className="flex gap-8 justify-center lg:justify-start">
             <Stat label="tracks" value={trackCount} />
@@ -423,15 +454,22 @@ function LibraryStats({
             {genreCount > 0 && <Stat label="genres" value={genreCount} />}
           </div>
 
-          <div className="flex flex-col items-center lg:items-start gap-1">
-            {cachedDate && <p className="text-zinc-600 text-xs">Cached {cachedDate}</p>}
-            <button
-              onClick={onRefresh}
-              className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors"
-            >
-              Refresh library
-            </button>
-          </div>
+          {/* Refresh is a Spotify re-fetch — meaningless for the static demo snapshot. */}
+          {demoMode ? (
+            <p className="text-zinc-600 text-xs">
+              A real library snapshot — log in with a beta account to use your own.
+            </p>
+          ) : (
+            <div className="flex flex-col items-center lg:items-start gap-1">
+              {cachedDate && <p className="text-zinc-600 text-xs">Cached {cachedDate}</p>}
+              <button
+                onClick={onRefresh}
+                className="text-zinc-500 hover:text-zinc-300 text-xs underline transition-colors"
+              >
+                Refresh library
+              </button>
+            </div>
+          )}
         </div>
 
         <BrandBanner />
@@ -871,6 +909,7 @@ function CurateResult({
   genresByTrack,
   getAccessToken,
   onReset,
+  demoMode,
 }: {
   results: CuratedTrack[]
   tracks: Track[]
@@ -880,6 +919,7 @@ function CurateResult({
   genresByTrack: Map<string, string[]>
   getAccessToken: () => Promise<string>
   onReset: () => void
+  demoMode: boolean
 }) {
   const trackMap = useMemo(() => new Map(tracks.map((t) => [t.id, t])), [tracks])
   // Tracks the user has crossed off before saving. Kept in the list (dimmed)
@@ -1100,6 +1140,15 @@ function CurateResult({
                       : 'Share'}
                 </button>
               </div>
+            </div>
+          ) : demoMode ? (
+            // Demo can't save (no Spotify account) — the payoff becomes the
+            // waitlist pitch, right at the moment of maximum want.
+            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+              <p className="text-sm font-semibold text-white">
+                Like this playlist? Saving it needs a beta slot.
+              </p>
+              <WaitlistForm />
             </div>
           ) : (
             <form

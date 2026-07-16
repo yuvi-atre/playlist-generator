@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "tsx",
+        "--env-file=/Users/yuvia/Desktop/Coding Projects/Playlist Generator/.env",
+        "scripts/dev-api.ts"
+      ],
+      "port": 3001
+    }
+  ]
+}

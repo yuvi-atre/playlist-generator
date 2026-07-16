@@ -4,11 +4,12 @@ import type { AppError } from '../lib/types'
 
 interface Props {
   onLogin: () => void
+  onTryDemo: () => void
   loading: boolean
   error: AppError | null
 }
 
-export function LoginScreen({ onLogin, loading, error }: Props) {
+export function LoginScreen({ onLogin, onTryDemo, loading, error }: Props) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-8 px-4">
       <div className="flex flex-col items-center gap-3 text-center">
@@ -30,6 +31,15 @@ export function LoginScreen({ onLogin, loading, error }: Props) {
         {loading ? 'Redirecting…' : 'Continue with Spotify'}
       </button>
 
+      {/* Spotify caps the beta at 5 allowlisted accounts — the demo is the
+          public tier: full curation on a bundled sample library, no login. */}
+      <button
+        onClick={onTryDemo}
+        className="text-sm text-zinc-400 underline decoration-zinc-600 underline-offset-4 transition-colors hover:text-white"
+      >
+        or try the demo — no account needed
+      </button>
+
       {error && <p className="text-red-400 text-sm text-center max-w-xs">{error.message}</p>}
 
       <WaitlistForm />
@@ -40,7 +50,8 @@ export function LoginScreen({ onLogin, loading, error }: Props) {
 // Spotify's dev-mode allowlist caps the beta at 5 testers, so login only works
 // for allowlisted accounts. Everyone else lands here: signups fire a Discord
 // webhook (see api/waitlist.ts) and slots rotate manually in the dashboard.
-function WaitlistForm() {
+// Also rendered inside the demo's review screen in place of Save-to-Spotify.
+export function WaitlistForm() {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
