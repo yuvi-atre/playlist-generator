@@ -7,6 +7,7 @@ const ROUTES: Record<string, string> = {
   '/api/curate': '../api/curate.ts',
   '/api/expand-vibe': '../api/expand-vibe.ts',
   '/api/waitlist': '../api/waitlist.ts',
+  '/api/discover': '../api/discover.ts',
 }
 
 const server = http.createServer(async (req, res) => {

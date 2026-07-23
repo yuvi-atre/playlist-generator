@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { LASTFM_API_KEY } from '../lib/config'
+import { canonicalizeGenres } from '../lib/genres'
 import { fetchArtistGenres } from '../lib/lastfm'
 import { preFilter, SHORTLIST_SIZE } from '../lib/preFilter'
 import type {
@@ -7,11 +8,15 @@ import type {
   CurateFilters,
   CurateResponse,
   CuratedTrack,
+  DiscoveredTrackInfo,
+  DiscoverResponse,
   Track,
   VibeExpansion,
 } from '../lib/types'
 
 export type CuratePhase = 'expanding' | 'matching' | 'enriching' | 'curating'
+
+const DISCOVERY_COUNT = 10
 
 // Haiku vibe-expansion, cached per-vibe in localStorage (cheap call, but no reason
 // to repeat it for the same prompt). Non-fatal: any failure returns null and
@@ -71,6 +76,28 @@ async function fetchVibeExpansion(vibe: string): Promise<VibeExpansion | null> {
   }
 }
 
+// Top genres/artists by frequency in the user's own library — sent to
+// Discovery so Claude can lean into their taste while avoiding their
+// already-well-covered artists. Only meaningful with `discover` filters on.
+function computeTasteProfile(library: Track[]): { genres: string[]; artists: string[] } {
+  const artistCounts = new Map<string, number>()
+  const genreCounts = new Map<string, number>()
+  for (const t of library) {
+    const artist = t.artists[0]
+    if (artist) artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1)
+    for (const g of canonicalizeGenres(t.genres)) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1)
+  }
+  const artists = [...artistCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([a]) => a)
+  const genres = [...genreCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([g]) => g)
+  return { genres, artists }
+}
+
 export interface CurateState {
   loading: boolean
   phase: CuratePhase | null
@@ -82,6 +109,9 @@ export interface CurateState {
   curatorNote: string | null
   // Last.fm genres per curated track id — captured during curation, reused for display.
   genresByTrack: Map<string, string[]>
+  // Discovery-mode tracks aren't in the caller's library, so their display info
+  // (name/artists/art/year) travels alongside the result instead of a trackMap lookup.
+  discoveredInfo: Map<string, DiscoveredTrackInfo>
   curate: (vibe: string, filters?: CurateFilters) => Promise<void>
   reset: () => void
 }
@@ -107,6 +137,7 @@ export function useCurate(library: Track[]): CurateState {
   const [suggestedName, setSuggestedName] = useState<string | null>(null)
   const [curatorNote, setCuratorNote] = useState<string | null>(null)
   const [genresByTrack, setGenresByTrack] = useState<Map<string, string[]>>(new Map())
+  const [discoveredInfo, setDiscoveredInfo] = useState<Map<string, DiscoveredTrackInfo>>(new Map())
 
   const curate = useCallback(
     async (vibe: string, filters?: CurateFilters) => {
@@ -116,6 +147,7 @@ export function useCurate(library: Track[]): CurateState {
       setResult(null)
       setSuggestedName(null)
       setCuratorNote(null)
+      setDiscoveredInfo(new Map())
       setVibe(vibe)
 
       try {
@@ -171,19 +203,38 @@ export function useCurate(library: Track[]): CurateState {
         // Keep the genres so the review screen can display them (no extra requests).
         setGenresByTrack(new Map(candidates.map((c) => [c.id, c.genres])))
 
+        const interpretation = expansion
+          ? { summary: expansion.summary, moods: expansion.moods, energy: expansion.energy }
+          : undefined
+
         setPhase('curating')
-        const res = await fetch('/api/curate', {
+        // Curation and Discovery are independent requests fired in PARALLEL, not
+        // merged into one Claude call: curation is tuned to pick ONLY from the
+        // candidate list, Discovery's entire job is proposing songs NOT in it —
+        // combining those instructions in one prompt risks degrading both, and a
+        // single malformed response would fail them together instead of apart.
+        // The token overhead of a second call is a fraction of a cent; the real
+        // cost is latency, which running them in parallel eliminates.
+        const curatePromise = fetch('/api/curate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            vibe,
-            candidates,
-            length: filters?.length,
-            interpretation: expansion
-              ? { summary: expansion.summary, moods: expansion.moods, energy: expansion.energy }
-              : undefined,
-          }),
+          body: JSON.stringify({ vibe, candidates, length: filters?.length, interpretation }),
         })
+        const discoverPromise = filters?.discover
+          ? fetch('/api/discover', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                vibe,
+                interpretation,
+                tasteProfile: computeTasteProfile(library),
+                libraryTrackIds: library.map((t) => t.id),
+                count: DISCOVERY_COUNT,
+              }),
+            }).catch(() => null) // non-fatal — see the merge step below
+          : Promise.resolve(null)
+
+        const [res, discoverRes] = await Promise.all([curatePromise, discoverPromise])
 
         if (res.status === 429) {
           setError({ code: 'rate_limit', message: 'Rate limit hit — try again in a moment.' })
@@ -209,9 +260,32 @@ export function useCurate(library: Track[]): CurateState {
           return
         }
 
+        // Discoveries append AFTER curation, tagged isNew — "Short" still means
+        // ~15 real curated picks; discoveries are additive, never counted toward
+        // the length target. A failed/empty discovery call just means none show.
+        let tracks: CuratedTrack[] = data.tracks
+        if (discoverRes?.ok) {
+          const discovery = (await discoverRes.json().catch(() => null)) as DiscoverResponse | null
+          if (discovery?.tracks?.length) {
+            const info = new Map<string, DiscoveredTrackInfo>()
+            for (const t of discovery.tracks) {
+              info.set(t.id, {
+                name: t.name,
+                artists: t.artists,
+                albumArt: t.albumArt,
+                year: t.year,
+              })
+            }
+            setDiscoveredInfo(info)
+            tracks = tracks.concat(
+              discovery.tracks.map((t) => ({ id: t.id, reason: t.reason, isNew: true }))
+            )
+          }
+        }
+
         setSuggestedName(data.playlistName?.trim() || null)
         setCuratorNote(data.curatorNote?.trim() || null)
-        setResult(data.tracks)
+        setResult(tracks)
       } catch {
         setError({
           code: 'unknown',
@@ -231,6 +305,7 @@ export function useCurate(library: Track[]): CurateState {
     setSuggestedName(null)
     setCuratorNote(null)
     setGenresByTrack(new Map())
+    setDiscoveredInfo(new Map())
   }, [])
 
   return {
@@ -242,6 +317,7 @@ export function useCurate(library: Track[]): CurateState {
     suggestedName,
     curatorNote,
     genresByTrack,
+    discoveredInfo,
     curate,
     reset,
   }

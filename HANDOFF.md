@@ -353,12 +353,66 @@ long-term escape hatch (user creates their own Spotify app → no allowlist), de
     — Spotify's Feb-2026 `/me/tracks` payload apparently stopped including it (undefined → dropped by
     JSON.stringify). Harmless (`track.popularity || 0` guards), but the popularity tiebreak in
     preFilter is currently inert for everyone.
-- **Discovery mode (SPEC'D, do not build yet):** `docs/discovery-spec.md` — propose-by-Claude,
-  verify-by-Spotify-Search design (recommendations endpoints 403, search works). Toggle in Filters,
-  ~20% NEW-badged tracks, +0.5–1¢/playlist. Open decisions listed in the spec.
 - **Promo card typewriter** updated "anime night" → "sunday morning coffee" (the chosen demo vibe).
 - **Cost baseline (from user's Console dashboard):** $1.59 total to date ≈ 2–2.5¢/playlist. Advice
   given: buy $20–25 credits, keep spend cap ~$20; intro pricing ends 2026-08-31 (→ ~3–4¢/playlist).
+
+## Session 2026-07-16 (cont.) — Discovery mode BUILT (was spec-only)
+
+User pressure-tested the spec before greenlighting: "will filtering actually work?" and "can we save
+tokens by merging with curation?" Answered both with real proof before writing the feature, not just
+assertions — see below. Fully built, deployed, and endpoint-tested (SPOTIFY_CLIENT_SECRET still needs
+adding — see ⚠️ below).
+
+- **Verification proven BEFORE building, not after:** wrote `src/lib/discoveryVerify.ts` (pure,
+  no network) and a 6-case fixture suite (clean match, punctuation drift, hallucination,
+  live/remix-vs-studio, already-in-library, wrong-artist-same-title) run via `npx tsx` against the
+  actual shipped module. **Caught a real bug on first run:** the normalizer stripped hyphens instead
+  of turning them into spaces, so "Anti-Hero" → "antihero" (one token) silently failed to match "Anti
+  Hero" (two tokens) — would have dropped every hyphenated title. Fixed (`replace(/[^a-z0-9\s]/g, '
+')`, space not empty-string), 6/6 passing before it was ever wired into the endpoint.
+- **Design pivot from the original spec:** verification moved SERVER-SIDE using a Spotify **Client
+  Credentials** (app-level) token instead of the user's PKCE token. Two wins: (1) Discovery now works
+  in **demo mode** too — no login needed, contradicts/supersedes the old spec's "hidden in demo"
+  limitation; (2) search load moves off the browser. Needs `SPOTIFY_CLIENT_SECRET` (the app's
+  dashboard already has one — PKCE just never used it) — reuses `VITE_SPOTIFY_CLIENT_ID` for the ID
+  half, no new ID var needed. Token cached in module scope inside `api/discover.ts` (kept OUT of
+  `src/lib` deliberately — that dir is type-checked under the browser tsconfig with no Node types for
+  `process`/`Buffer`; confirmed via a scratch Node-aware tsconfig checking all four `api/*.ts` files,
+  0 errors, before shipping).
+- **Token-merge question answered with math, not vibes:** combining curation + discovery into one
+  Claude call would save ~300–500 tokens (system prompt + restated vibe) ≈ a tenth of a cent — not a
+  real lever. Kept as **separate parallel requests** (`Promise.all` in `useCurate`) instead: curation
+  is tuned to pick ONLY from the candidate list, discovery's entire job is proposing songs NOT in it —
+  merging those instructions risks degrading both (this project just spent a whole session fixing
+  curation quality), and one malformed response would fail both instead of just one. Parallel fetch
+  gets ~all the latency benefit anyway.
+- **`api/discover.ts`:** origin-guarded, vibe/tasteProfile/libraryTrackIds/count all capped
+  defensively. Claude (Sonnet, structured outputs) proposes `count` (default 10, max 15) real songs
+  given the vibe + interpretation + taste profile (top 15 artists / top 10 genres from the user's own
+  library, computed client-side in `useCurate`'s `computeTasteProfile`) — told to avoid the user's top
+  artists unless the vibe names one. Each proposal is searched via Spotify (`track:"..." artist:"..."`,
+  concurrency 5) using the app token, run through `verifyDiscovery`, de-duped against each other AND
+  against `libraryTrackIds`. Failure at ANY stage (missing secret, Claude error, malformed JSON) →
+  `200 { tracks: [] }`, never blocks curation, which is a fully independent request.
+- **UI:** Filters panel gained a switch-style **"Discover new music"** toggle (default off; survives
+  Clear-filters like `length` does — it's a setting, not a gate). Discoveries append AFTER curated
+  tracks (additive to the length target, not counted toward it — "Short" still means ~15 real picks)
+  with a green **NEW** badge next to the track name. `CuratedTrack` gained `isNew?: boolean`;
+  `CurateResult` falls back to server-returned `DiscoveredTrackInfo` (name/artists/art/year) for display
+  since discovered tracks aren't in `trackMap`. Saving works unchanged — discovered IDs are real
+  verified Spotify track IDs, `addTracksToPlaylist` doesn't care about their origin.
+- **Verified locally end-to-end** (dev-api on a throwaway port): missing-vibe → 400, foreign origin →
+  403, missing `SPOTIFY_CLIENT_SECRET` → graceful `200 { tracks: [] }` with a clear server log
+  (`Discovery: app token unavailable — …`), and confirmed `/api/curate` is completely unaffected by
+  the new endpoint's presence.
+- ⚠️ **NOT yet usable in prod** — `SPOTIFY_CLIENT_SECRET` isn't set. Same flow as the Discord webhook:
+  Spotify dashboard → app → copy Client Secret → `npx vercel env add SPOTIFY_CLIENT_SECRET production`
+  (mark sensitive) → add to local `.env` → redeploy. Until then Discovery silently returns no tracks
+  (toggle visible, curation unaffected) rather than erroring.
+- `docs/discovery-spec.md` is now historical — superseded by this entry, kept for the original
+  reasoning trail (open decisions #1 fixed-count and #2 additive-not-counted were both resolved as
+  the spec's own recommendation).
 
 ## Next step (older open ideas, none started)
 

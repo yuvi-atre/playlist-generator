@@ -21,6 +21,7 @@ import type {
   AppError,
   CurateFilters,
   CuratedTrack,
+  DiscoveredTrackInfo,
   PlaylistLength,
   SpotifyUser,
   Track,
@@ -165,6 +166,7 @@ export function LibraryScreen({
             suggestedName={curate.suggestedName}
             curatorNote={curate.curatorNote}
             genresByTrack={curate.genresByTrack}
+            discoveredInfo={curate.discoveredInfo}
             getAccessToken={getAccessToken}
             onReset={curate.reset}
             demoMode={demoMode}
@@ -624,7 +626,11 @@ function FiltersPanel({
     }
   }
 
-  const clearAll = () => onChange({ ...DEFAULT_FILTERS, length: filters.length })
+  // "Clear filters" resets the hard GATES only — length and the discover
+  // toggle are settings, not gates, so they survive a clear (same reasoning
+  // that already applied to length before discover existed).
+  const clearAll = () =>
+    onChange({ ...DEFAULT_FILTERS, length: filters.length, discover: filters.discover })
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
@@ -681,6 +687,35 @@ function FiltersPanel({
                   )
                 })}
               </div>
+            </div>
+
+            {/* Discover: mixes in AI-proposed, Spotify-verified tracks NOT in
+                the library — additive to the length target, badged NEW on
+                the review screen. Works in demo mode too (verification is
+                server-side against Spotify's catalog, no user login needed). */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <FilterLabel>Discover new music</FilterLabel>
+                <span className="text-xs text-zinc-500">
+                  Mix in a few songs that fit the vibe but aren’t in your library
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={filters.discover}
+                disabled={disabled}
+                onClick={() => onChange({ ...filters, discover: !filters.discover })}
+                className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors disabled:opacity-40 ${
+                  filters.discover ? 'border-green-500 bg-green-600' : 'border-zinc-700 bg-zinc-800'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${EASE_QUART} ${
+                    filters.discover ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
             </div>
 
             {/* Decades */}
@@ -907,6 +942,7 @@ function CurateResult({
   suggestedName,
   curatorNote,
   genresByTrack,
+  discoveredInfo,
   getAccessToken,
   onReset,
   demoMode,
@@ -917,11 +953,18 @@ function CurateResult({
   suggestedName: string | null
   curatorNote: string | null
   genresByTrack: Map<string, string[]>
+  discoveredInfo: Map<string, DiscoveredTrackInfo>
   getAccessToken: () => Promise<string>
   onReset: () => void
   demoMode: boolean
 }) {
   const trackMap = useMemo(() => new Map(tracks.map((t) => [t.id, t])), [tracks])
+  // Discovery-mode tracks aren't in the user's library, so trackMap won't have
+  // them — fall back to the display info the server returned alongside them.
+  const displayInfo = (
+    id: string
+  ): { name: string; artists: string[]; year: number; albumArt: string | null } | undefined =>
+    trackMap.get(id) ?? discoveredInfo.get(id)
   // Tracks the user has crossed off before saving. Kept in the list (dimmed)
   // so a mis-click is one tap to undo.
   const [removed, setRemoved] = useState<Set<string>>(new Set())
@@ -1212,8 +1255,8 @@ function CurateResult({
         ref={listRef}
         className="custom-scrollbar w-full flex flex-col gap-2 min-w-0 overflow-y-auto pr-2 max-h-[70vh] lg:max-h-[calc(100vh-9rem)]"
       >
-        {results.map(({ id, reason }, i) => {
-          const track = trackMap.get(id)
+        {results.map(({ id, reason, isNew }, i) => {
+          const track = displayInfo(id)
           const isRemoved = removed.has(id)
           const genres = canonicalizeGenres(genresByTrack.get(id) ?? []).slice(0, 3)
           return (
@@ -1229,9 +1272,14 @@ function CurateResult({
               <AlbumArt url={track?.albumArt ?? null} />
               <div className="min-w-0 flex-1">
                 <span
-                  className={`block truncate text-sm font-medium text-white ${isRemoved ? 'line-through' : ''}`}
+                  className={`flex items-center gap-1.5 truncate text-sm font-medium text-white ${isRemoved ? 'line-through' : ''}`}
                 >
-                  {track?.name ?? id}
+                  <span className="truncate">{track?.name ?? id}</span>
+                  {isNew && (
+                    <span className="shrink-0 rounded-full border border-green-500/60 bg-green-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-wide text-green-400">
+                      New
+                    </span>
+                  )}
                 </span>
                 <span className="block truncate text-xs text-zinc-500">
                   {track?.artists.join(', ')} · {track?.year}

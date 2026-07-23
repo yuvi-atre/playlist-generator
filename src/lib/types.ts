@@ -64,6 +64,7 @@ export interface CurateFilters {
   excludeArtists: string[] // tracks by these artists are dropped
   decades: number[] // decade start years (e.g. 1990); if non-empty, track year must fall in one
   length: PlaylistLength
+  discover: boolean // mix in AI-proposed, Spotify-verified tracks NOT in the user's library
 }
 
 export const DEFAULT_FILTERS: CurateFilters = {
@@ -73,6 +74,7 @@ export const DEFAULT_FILTERS: CurateFilters = {
   excludeArtists: [],
   decades: [],
   length: 'medium',
+  discover: false,
 }
 
 // Haiku vibe-expansion: turns a free-text vibe into a full interpretation so
@@ -122,6 +124,39 @@ export interface CurateResponse {
 export interface CuratedTrack {
   id: string
   reason: string
+  isNew?: boolean // true for a Discovery-mode track — not in the user's library
+}
+
+// ── Discovery mode ────────────────────────────────────────────────────────────
+// Claude proposes real songs (by knowledge) that fit the vibe but aren't in the
+// user's library; the server verifies each against Spotify Search before it's
+// ever shown, dropping hallucinations, wrong versions, and library duplicates.
+// See src/lib/discoveryVerify.ts for the verification algorithm.
+
+export interface TasteProfile {
+  genres: string[] // user's top genres by artist count (canonicalized)
+  artists: string[] // user's top artists by track count — Claude is told to avoid these
+}
+
+export interface DiscoverRequest {
+  vibe: string
+  interpretation?: { summary: string; moods: string[]; energy: string }
+  tasteProfile: TasteProfile
+  libraryTrackIds: string[] // for de-dupe: drop a verified match already in the library
+  count?: number
+}
+
+// Display info for a discovered track — it's not in the client's library data,
+// so the server includes what it got back from Spotify Search directly.
+export interface DiscoveredTrackInfo {
+  name: string
+  artists: string[]
+  albumArt: string | null
+  year: number
+}
+
+export interface DiscoverResponse {
+  tracks: Array<{ id: string; reason: string } & DiscoveredTrackInfo>
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
