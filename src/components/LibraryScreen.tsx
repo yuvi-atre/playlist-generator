@@ -706,13 +706,13 @@ function FiltersPanel({
                 aria-checked={filters.discover}
                 disabled={disabled}
                 onClick={() => onChange({ ...filters, discover: !filters.discover })}
-                className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors disabled:opacity-40 ${
+                className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:opacity-40 ${
                   filters.discover ? 'border-green-500 bg-green-600' : 'border-zinc-700 bg-zinc-800'
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${EASE_QUART} ${
-                    filters.discover ? 'translate-x-5' : 'translate-x-0.5'
+                  className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${EASE_QUART} ${
+                    filters.discover ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
               </button>
